@@ -2,7 +2,7 @@
 use crate::engine::Session;
 use anyhow::{Result, anyhow, bail};
 use msduck_core::diagnostic::SqlError;
-use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
+use sqlparser::{ast::*, dialect::DuckDbDialect, parser::Parser};
 
 /// A converted SET or VALUES expression.
 pub(super) enum Converted {
@@ -463,7 +463,7 @@ impl Target {
         let Some(default) = &column.default else {
             return Ok(format!("CAST(NULL AS {})", column.physical));
         };
-        let value = Parser::new(&GenericDialect {})
+        let value = Parser::new(&DuckDbDialect {})
             .try_with_sql(default)?
             .parse_expr()?;
         let value = match crate::assignment::storage_kind(&column.declared) {

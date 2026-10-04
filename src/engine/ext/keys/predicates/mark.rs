@@ -34,7 +34,9 @@ fn not_text(catalog: &Catalog, expr: &Expr) -> bool {
         Expr::Nested(inner) => not_text(catalog, inner),
         Expr::Value(value) => matches!(value.value, Value::Number(..)),
         Expr::UnaryOp { expr, .. } => not_text(catalog, expr),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            false
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
             matches!(catalog.resolve(expr), Resolution::Plain { text: false })
         }
@@ -49,7 +51,9 @@ fn unknown(catalog: &Catalog, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => unknown(catalog, inner),
         // Variables and parameters are VARCHAR text in the backend.
-        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            false
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
             matches!(catalog.resolve(expr), Resolution::Unknown)
         }
@@ -100,7 +104,8 @@ fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
         Expr::Subquery(query) => match query.body.as_ref() {
             SetExpr::Select(select) => match select.projection.as_slice() {
                 [SelectItem::UnnamedExpr(p) | SelectItem::ExprWithAlias { expr: p, .. }] => {
-                    unicode(catalog, p)
+                    let scope = catalog.query_scope(query).select_scope(select);
+                    unicode(&scope, p)
                 }
                 _ => false,
             },
@@ -212,9 +217,15 @@ fn columns_collation<'a>(
     catalog: &Catalog,
     operands: impl Iterator<Item = &'a Expr>,
 ) -> Result<Option<String>, (String, String)> {
+    scoped_columns_collation(operands.map(|operand| (catalog, operand)))
+}
+
+fn scoped_columns_collation<'a, 'b>(
+    operands: impl Iterator<Item = (&'a Catalog, &'b Expr)>,
+) -> Result<Option<String>, (String, String)> {
     use msduck_sql::dialect::ext::keys::collation::DEFAULT;
     let mut name: Option<String> = None;
-    for operand in operands {
+    for (catalog, operand) in operands {
         let Some(found) = catalog.agreed_collation(operand) else {
             continue;
         };
@@ -255,21 +266,30 @@ fn own_collation<'a>(catalog: &'a Catalog, expr: &Expr) -> Option<&'a str> {
 /// literal, a character variable or parameter, or a character function or
 /// conversion of such text.
 fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    text_at(catalog, parameters, expr, 64)
+}
+
+fn text_at(catalog: &Catalog, parameters: &Parameters, expr: &Expr, depth: usize) -> bool {
+    if depth == 0 {
+        return false;
+    }
     use msduck_core::types::Type;
     match expr {
-        Expr::Nested(inner) => text(catalog, parameters, inner),
+        Expr::Nested(inner) => text_at(catalog, parameters, inner, depth - 1),
         Expr::Value(value) => matches!(
             value.value,
             Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
         ),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
-            .get(&ident.value.to_lowercase())
-            .is_some_and(|parameter| {
-                matches!(
-                    parameter.data_type,
-                    Type::Character(_) | Type::Text | Type::Ntext
-                )
-            }),
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            parameters
+                .get(&ident.value.to_lowercase())
+                .is_some_and(|parameter| {
+                    matches!(
+                        parameter.data_type,
+                        Type::Character(_) | Type::Text | Type::Ntext
+                    )
+                })
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.textual(expr),
         Expr::Cast { data_type, .. }
         | Expr::Convert {
@@ -281,8 +301,38 @@ fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
                 Ok(Type::Character(_) | Type::Text | Type::Ntext)
             )
         }
+        Expr::Subquery(query) => match query.body.as_ref() {
+            SetExpr::Select(select) => match select.projection.as_slice() {
+                [SelectItem::UnnamedExpr(p) | SelectItem::ExprWithAlias { expr: p, .. }] => {
+                    let scope = catalog.query_scope(query).select_scope(select);
+                    text_at(&scope, parameters, p, depth - 1)
+                }
+                _ => false,
+            },
+            _ => false,
+        },
+        Expr::Function(_) if super::lower::text_peer(expr) => true,
         Expr::Function(f) => {
             let name = f.name.to_string().to_ascii_uppercase();
+            if name == "COALESCE" {
+                let FunctionArguments::List(list) = &f.args else {
+                    return false;
+                };
+                let mut character = false;
+                for arg in &list.args {
+                    let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = arg else {
+                        return false;
+                    };
+                    if matches!(value, Expr::Value(v) if v.value == Value::Null) {
+                        continue;
+                    }
+                    if !text_at(catalog, parameters, value, depth - 1) {
+                        return false;
+                    }
+                    character = true;
+                }
+                return character;
+            }
             name == "CONCAT"
                 || matches!(
                     name.as_str(),
@@ -297,8 +347,8 @@ fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
                         | "REPLACE"
                         | "REVERSE"
                         | "ISNULL"
-                        | "COALESCE"
-                ) && first_argument(f).is_some_and(|a| text(catalog, parameters, a))
+                ) && first_argument(f)
+                    .is_some_and(|a| text_at(catalog, parameters, a, depth - 1))
         }
         _ => unicode(catalog, expr),
     }
@@ -312,13 +362,15 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => ansi(catalog, parameters, inner),
         Expr::Value(value) => matches!(value.value, Value::SingleQuotedString(_)),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
-            .get(&ident.value.to_lowercase())
-            .is_some_and(|parameter| {
-                matches!(parameter.data_type, Type::Text)
-                    || matches!(parameter.data_type, Type::Character(c)
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            parameters
+                .get(&ident.value.to_lowercase())
+                .is_some_and(|parameter| {
+                    matches!(parameter.data_type, Type::Text)
+                        || matches!(parameter.data_type, Type::Character(c)
                         if matches!(c.family(), Family::Char | Family::Varchar))
-            }),
+                })
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.ansi(expr),
         _ => false,
     }
@@ -338,13 +390,111 @@ fn ansi_keyed(expr: &Expr) -> bool {
             if matches!(list.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] if name(inner, "RTRIM"))))
 }
 
+fn scalar_character(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => scalar_character(inner),
+        Expr::Function(f) => {
+            matches!(
+                f.name.to_string().as_str(),
+                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+            ) || f.name.to_string().eq_ignore_ascii_case("ISNULL")
+                && first_argument(f).is_some_and(|a| matches!(a, Expr::Subquery(_)))
+        }
+        _ => false,
+    }
+}
+
+fn scalar_character_predicate(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    let proved = |operands: &[&Expr]| {
+        operands.iter().any(|operand| scalar_character(operand))
+            && operands.iter().all(|operand| {
+                text(catalog, parameters, operand)
+                    || matches!(operand, Expr::Value(v) if v.value == Value::Null)
+            })
+    };
+    match expr {
+        Expr::BinaryOp { left, op, right } if operation(op).is_some() => proved(&[left, right]),
+        Expr::Between {
+            expr, low, high, ..
+        } => proved(&[expr, low, high]),
+        Expr::InList { expr, list, .. } => {
+            let operands: Vec<_> = std::iter::once(expr.as_ref()).chain(list.iter()).collect();
+            proved(&operands)
+        }
+        Expr::Like { expr, pattern, .. } => proved(&[expr, pattern]),
+        Expr::Case {
+            operand: Some(operand),
+            conditions,
+            ..
+        } => {
+            let operands: Vec<_> = std::iter::once(operand.as_ref())
+                .chain(conditions.iter().map(|condition| &condition.condition))
+                .collect();
+            proved(&operands)
+        }
+        _ => false,
+    }
+}
+
+/// Scalar character declarations can require scoped column proof even when
+/// the catalog contains only ANSI columns. Conditional sites alone cannot.
+pub(super) fn scalar_character_predicates<T: Visit>(
+    catalog: &Catalog,
+    parameters: &Parameters,
+    node: &T,
+) -> bool {
+    struct Find<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
+    impl Find<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.2.last().unwrap_or(self.0)
+        }
+    }
+    impl Visitor for Find<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
+            self.2.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+            self.2.push(self.catalog().select_scope(select));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &Select) -> ControlFlow<()> {
+            // Retain a simple SELECT's declarations for query ORDER BY.
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            let proved = scalar_character_predicate(self.catalog(), self.1, expr);
+            if proved {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    node.visit(&mut Find(catalog, parameters, Vec::new(), Vec::new()))
+        .is_break()
+}
+
 /// Mark the operands of one operation when any of them is Unicode text;
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
 /// handling.
 fn mark(
     catalog: &Catalog,
-    _parameters: &Parameters,
+    parameters: &Parameters,
     operation: &str,
     mut operands: Vec<&mut Expr>,
 ) -> Result<(), SqlError> {
@@ -372,7 +522,15 @@ fn mark(
             _ => e.clone(),
         }
     };
-    let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)));
+    // Scalar ISNULL widths have a declared character result but are not
+    // catalog columns. Use that declaration only with proved character peers;
+    // numeric and unresolved operands retain their coercion path.
+    let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)))
+        || operands.iter().any(|o| scalar_character(o))
+            && operands.iter().all(|o| {
+                text(catalog, parameters, o)
+                    || matches!(&**o, Expr::Value(v) if v.value == Value::Null)
+            });
     let typed = operands.iter().any(|o| not_text(catalog, o));
     for operand in operands {
         let name = if text {
@@ -451,9 +609,13 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
         }
         _ => return,
     };
-    if !operands
-        .iter()
-        .all(|o| !collated(o) && !marked(o) && text(&catalog, parameters, o))
+    if !operands.iter().any(|o| text(&catalog, parameters, o))
+        || !operands.iter().all(|o| {
+            !collated(o)
+                && !marked(o)
+                && (text(&catalog, parameters, o)
+                    || matches!(&**o, Expr::Value(v) if v.value == Value::Null))
+        })
     {
         return;
     }
@@ -491,9 +653,38 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
 /// operand (equality and IN get this from ANSI padding). This pass runs on
 /// its own, without the Unicode marking.
 pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, node: &mut T) {
-    struct Pad<'a>(&'a Catalog, &'a Parameters);
+    struct Pad<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
+    impl Pad<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.2.last().unwrap_or(self.0)
+        }
+    }
     impl VisitorMut for Pad<'_> {
         type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
+            self.2.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &mut Select) -> ControlFlow<()> {
+            self.2.push(self.catalog().select_scope(select));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &mut Select) -> ControlFlow<()> {
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
+            ControlFlow::Continue(())
+        }
+
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
             let operands: Vec<&mut Expr> = match expr {
                 Expr::BinaryOp {
@@ -513,8 +704,8 @@ pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters
             if operands
                 .iter()
                 .any(|o| collated(o) || marked(o) || trimmed(o))
-                || !operands.iter().all(|o| ansi(self.0, self.1, o))
-                || own_collation_any(self.0, &operands)
+                || !operands.iter().all(|o| ansi(self.catalog(), self.1, o))
+                || own_collation_any(self.catalog(), &operands)
             {
                 return ControlFlow::Continue(());
             }
@@ -525,7 +716,7 @@ pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters));
+    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters, Vec::new(), Vec::new()));
 }
 
 /// Whether an operand is a column with a collation of its own.
@@ -537,20 +728,57 @@ pub(super) fn rewrite<T: VisitMut>(
     catalog: &Catalog,
     parameters: &Parameters,
     node: &mut T,
+    scalar_only: bool,
 ) -> Result<(), SqlError> {
-    struct Mark<'a>(&'a Catalog, &'a Parameters);
+    struct Mark<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>, bool);
+    impl Mark<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.2.last().unwrap_or(self.0)
+        }
+    }
     impl VisitorMut for Mark<'_> {
         type Break = SqlError;
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<SqlError> {
+            self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<SqlError> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
+            self.2.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &mut Select) -> ControlFlow<SqlError> {
+            self.2.push(self.catalog().select_scope(select));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &mut Select) -> ControlFlow<SqlError> {
+            // Query ORDER BY is visited after its SELECT. Retain this frame
+            // until post_query; set-operation arms still pop independently.
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
+            ControlFlow::Continue(())
+        }
+
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
+            // A scalar-character-only admission must not introduce MAYBE
+            // markers into unrelated temporal/currency predicates.
+            if self.4 && !scalar_character_predicate(self.catalog(), self.1, expr) {
+                return ControlFlow::Continue(());
+            }
             let result = match expr {
                 Expr::BinaryOp { left, op, right } => match operation(op) {
-                    Some(operation) => mark(self.0, self.1, operation, vec![left, right]),
+                    Some(operation) => mark(self.catalog(), self.1, operation, vec![left, right]),
                     None => Ok(()),
                 },
                 Expr::Between {
                     expr, low, high, ..
                 } => mark(
-                    self.0,
+                    self.catalog(),
                     self.1,
                     "greater than or equal to",
                     vec![expr, low, high],
@@ -565,23 +793,23 @@ pub(super) fn rewrite<T: VisitMut>(
                     ..
                 } => {
                     if let Err((left, right)) =
-                        columns_collation(self.0, [&**expr, &**pattern].into_iter())
+                        columns_collation(self.catalog(), [&**expr, &**pattern].into_iter())
                         && ![&**expr, &**pattern].iter().any(|o| collated(o))
                     {
                         return ControlFlow::Break(conflict("like", &left, &right));
                     }
                     if [&**expr, &**pattern]
                         .iter()
-                        .all(|o| !collated(o) && !marked(o) && text(self.0, self.1, o))
-                        && own_collation(self.0, expr).is_none()
-                        && own_collation(self.0, pattern).is_none()
+                        .all(|o| !collated(o) && !marked(o) && text(self.catalog(), self.1, o))
+                        && own_collation(self.catalog(), expr).is_none()
+                        && own_collation(self.catalog(), pattern).is_none()
                     {
                         // ASCII pattern matching ignores the value's
                         // trailing blanks (the pattern's count); Unicode
                         // matching keeps them.
                         let ascii = [&**expr, &**pattern]
                             .iter()
-                            .all(|o| ansi(self.0, self.1, o));
+                            .all(|o| ansi(self.catalog(), self.1, o));
                         for (index, operand) in [expr, pattern].into_iter().enumerate() {
                             let mut inner = std::mem::replace(
                                 operand.as_mut(),
@@ -594,13 +822,13 @@ pub(super) fn rewrite<T: VisitMut>(
                         }
                         Ok(())
                     } else {
-                        mark(self.0, self.1, "like", vec![expr, pattern])
+                        mark(self.catalog(), self.1, "like", vec![expr, pattern])
                     }
                 }
                 Expr::InList { expr, list, .. } => {
                     let mut operands = vec![expr.as_mut()];
                     operands.extend(list.iter_mut());
-                    mark(self.0, self.1, "equal to", operands)
+                    mark(self.catalog(), self.1, "equal to", operands)
                 }
                 Expr::Case {
                     operand: Some(operand),
@@ -609,7 +837,7 @@ pub(super) fn rewrite<T: VisitMut>(
                 } if !volatile(operand) => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
-                    mark(self.0, self.1, "equal to", operands)
+                    mark(self.catalog(), self.1, "equal to", operands)
                 }
                 // DISTINCT counts and extrema of a column with a collation
                 // of its own keep it (explicitly), instead of the default's
@@ -629,7 +857,7 @@ pub(super) fn rewrite<T: VisitMut>(
                             ))
                         && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] =
                             list.args.as_mut_slice()
-                        && let Some(name) = own_collation(self.0, value).map(str::to_owned)
+                        && let Some(name) = own_collation(self.catalog(), value).map(str::to_owned)
                         // Binding gives Latin1_General_100_BIN2 extrema their
                         // own lossless UTF-16 path.
                         && (count || !name.eq_ignore_ascii_case("Latin1_General_100_BIN2"))
@@ -655,20 +883,21 @@ pub(super) fn rewrite<T: VisitMut>(
                         && !marked(second)
                     {
                         if let Err((left, right)) =
-                            columns_collation(self.0, [&*first, &*second].into_iter())
+                            columns_collation(self.catalog(), [&*first, &*second].into_iter())
                         {
                             return ControlFlow::Break(conflict("equal to", &left, &right));
                         }
                         // A first argument with a collation of its own
                         // compares under it: the second argument takes it
                         // explicitly, leaving the first (and the result) as is.
-                        if let Some(name) = own_collation(self.0, first).map(str::to_owned) {
+                        if let Some(name) = own_collation(self.catalog(), first).map(str::to_owned)
+                        {
                             let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
                             *second = Expr::Collate {
                                 expr: Box::new(inner),
                                 collation: ObjectName::from(vec![Ident::new(name)]),
                             };
-                        } else if unicode(self.0, first) {
+                        } else if unicode(self.catalog(), first) {
                             let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
                             *second = msduck_sql::expr::unary_function(MARK, inner);
                         }
@@ -682,6 +911,10 @@ pub(super) fn rewrite<T: VisitMut>(
                 } => {
                     let member =
                         matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
+                    let mut projected_catalog = self.catalog().query_scope(subquery);
+                    if let SetExpr::Select(select) = subquery.body.as_ref() {
+                        projected_catalog = projected_catalog.select_scope(select);
+                    }
                     // A column with a collation of its own, on either side,
                     // compares through the explicit COLLATE lowering; columns
                     // of different collations conflict.
@@ -696,14 +929,17 @@ pub(super) fn rewrite<T: VisitMut>(
                             },
                             _ => None,
                         };
-                        let mut operands: Vec<&Expr> = vec![value.as_ref()];
-                        operands.extend(projected.as_deref());
-                        if let Err((left, right)) = columns_collation(self.0, operands.into_iter())
-                        {
+                        let mut operands = vec![(self.catalog(), value.as_ref())];
+                        operands.extend(projected.as_deref().map(|p| (&projected_catalog, p)));
+                        if let Err((left, right)) = scoped_columns_collation(operands.into_iter()) {
                             return ControlFlow::Break(conflict("equal to", &left, &right));
                         }
-                        let name = own_collation(self.0, value)
-                            .or_else(|| projected.as_deref().and_then(|p| own_collation(self.0, p)))
+                        let name = own_collation(self.catalog(), value)
+                            .or_else(|| {
+                                projected
+                                    .as_deref()
+                                    .and_then(|p| own_collation(&projected_catalog, p))
+                            })
                             .map(str::to_owned);
                         if let Some(name) = name {
                             let wrap = |operand: &mut Expr| {
@@ -735,7 +971,8 @@ pub(super) fn rewrite<T: VisitMut>(
                     };
                     if !member
                         && !collated(value)
-                        && (unicode(self.0, value) || projected.is_some_and(|p| unicode(self.0, p)))
+                        && (unicode(self.catalog(), value)
+                            || projected.is_some_and(|p| unicode(&projected_catalog, p)))
                     {
                         let inner =
                             std::mem::replace(value.as_mut(), Expr::Value(Value::Null.into()));
@@ -751,7 +988,10 @@ pub(super) fn rewrite<T: VisitMut>(
             }
         }
     }
-    match VisitMut::visit(node, &mut Mark(catalog, parameters)) {
+    match VisitMut::visit(
+        node,
+        &mut Mark(catalog, parameters, Vec::new(), Vec::new(), scalar_only),
+    ) {
         ControlFlow::Break(error) => Err(error),
         ControlFlow::Continue(()) => Ok(()),
     }

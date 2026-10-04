@@ -248,6 +248,9 @@ fn passes(expr: &Expr) -> bool {
                 | "arg_min"
                 | "arg_max"
                 | "__msduck_isnull"
+                | "__msduck_isnull_subquery"
+                | "__msduck_isnull_nvarchar_width"
+                | "__msduck_isnull_nchar_width"
         )
     })
 }
@@ -416,13 +419,90 @@ fn dispatched(operands: &[&Expr]) -> bool {
             .any(|o| has_subquery(o) || collated(o) || is_typeof(o) || lowered(o))
 }
 
+/// A declaration-backed character producer after bottom-up lowering.
+/// Generic marker names and runtime values do not establish a declaration.
+pub(super) fn text_peer(value: &Expr) -> bool {
+    match value {
+        Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => text_peer(inner),
+        Expr::Value(v) => matches!(
+            v.value,
+            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
+        ),
+        Expr::Cast { data_type, .. } => {
+            matches!(data_type, DataType::Text | DataType::String(_))
+                || matches!(
+                    msduck_sql::sql_type::declaration(data_type),
+                    Ok(msduck_core::types::Type::Character(_))
+                )
+        }
+        Expr::Function(f) => matches!(
+            f.name.to_string().as_str(),
+            MARK | TEXT
+                    | INPUT
+                    | OPERAND
+                    | CARRIER_INPUT
+                    | "__msduck_pack_unicode"
+                    | "__msduck_unicode_from_le"
+                    | "__msduck_concat_unicode"
+                    | "__msduck_cast_carrier_nvarchar"
+                    | "__msduck_cast_carrier_nchar"
+                    | "__msduck_isnull_nvarchar_width"
+                    | "__msduck_isnull_nchar_width"
+                    // The bottom-up translator has already lowered public
+                    // character CAST/TRY_CAST peers to these typed adapters.
+                    | "__msduck_cast_nvarchar"
+                    | "__msduck_try_nvarchar"
+                    | "__msduck_cast_varchar"
+                    | "__msduck_try_varchar"
+                    | "__msduck_cast_char"
+                    | "__msduck_try_char"
+                    | "__msduck_cast_carrier_char"
+                    | "__msduck_cast_carrier_varchar"
+                    | "__msduck_nchar_width"
+                    | "__msduck_nvarchar_width"
+                    | "__msduck_char_width"
+                    | "__msduck_varchar_width"
+        ),
+        // MAYBE and generic names containing "unicode" are not type
+        // declarations: e.g. __msduck_unicode itself returns an integer.
+        _ => false,
+    }
+}
 /// The rewrite of one comparison, or `None` when it needs none.
 fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
-    if comparison(op) && (marked(left) || marked(right)) {
+    // Width adapters return Unicode but may contain a scalar query. For
+    // text peers, key each operand once without duplicating that query in a
+    // typeof CASE. Numeric/unknown peers retain the old backend coercion
+    // through text; passing an integer to a Unicode key would reject it.
+    let unicode_width = |value: &Expr| {
+        function_name(value).is_some_and(|name| {
+            matches!(
+                name.as_str(),
+                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+            )
+        })
+    };
+    let width_text =
+        unicode_width(left) && text_peer(right) || unicode_width(right) && text_peer(left);
+    if comparison(op) && (marked(left) || marked(right) || width_text) {
         return Some(Expr::BinaryOp {
             left: Box::new(strict_key(left)),
             op: op.clone(),
             right: Box::new(strict_key(right)),
+        });
+    }
+    if comparison(op) && (unicode_width(left) || unicode_width(right)) {
+        let text = |value: &Expr| {
+            if unicode_width(value) {
+                call(TEXT, vec![input(value.clone())])
+            } else {
+                value.clone()
+            }
+        };
+        return Some(Expr::BinaryOp {
+            left: Box::new(text(left)),
+            op: op.clone(),
+            right: Box::new(text(right)),
         });
     }
     if !comparison(op) || !dispatched(&[left, right]) {
@@ -788,6 +868,26 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
         return Some(lowered);
     }
     let args = arguments(expr)?;
+    // Fixed-result lowering introduces this width adapter after the root
+    // annotation pass. A proved native carrier must never enter its VARCHAR
+    // overload, which would stringify the STRUCT. Move its single operand
+    // into the equivalent native carrier conversion without a typeof CASE.
+    if name == "__msduck_nchar_width"
+        && let [value, width] = args.as_slice()
+        && function_name(value).is_some_and(|name| {
+            matches!(
+                name.as_str(),
+                "__msduck_cast_carrier_nchar"
+                    | "__msduck_cast_carrier_nvarchar"
+                    | "__msduck_carrier_input"
+            )
+        })
+    {
+        return Some(call(
+            "__msduck_cast_carrier_nchar",
+            vec![(*value).clone(), (*width).clone()],
+        ));
+    }
     if let Some((cast, unicode)) = carrier_cast(name)
         && let [value, width] = args.as_slice()
         && converted(value)
@@ -1221,6 +1321,18 @@ mod tests {
         );
         let member = lowered("__msduck_unicode_in(n) NOT IN (SELECT v FROM t)");
         assert!(member.starts_with("NOT ((CASE WHEN EXISTS (SELECT 1 FROM (SELECT v FROM t) AS __msduck_in (__msduck_v) WHERE __msduck_unicode_order_key(__msduck_unicode_operand(n)) = __msduck_unicode_order_key(__msduck_unicode_operand(__msduck_in.__msduck_v))) THEN true"), "{member}");
+    }
+
+    #[test]
+    fn fixed_width_adapter_preserves_a_native_carrier() {
+        assert_eq!(
+            lowered("__msduck_nchar_width(__msduck_cast_carrier_nchar(n,3),5)"),
+            "__msduck_cast_carrier_nchar(__msduck_cast_carrier_nchar(n, 3), 5)"
+        );
+        assert_eq!(
+            lowered("__msduck_nchar_width('x',5)"),
+            "__msduck_nchar_width('x', 5)"
+        );
     }
 
     #[test]

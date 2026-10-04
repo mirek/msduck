@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { test } from 'node:test'
 import { capture, canonical } from '../../scripts/lib/compatibility.mjs'
 import { describeFirstDifference } from '../../scripts/lib/reference.mjs'
-import { start } from '../support/client.mjs'
+import { start, query } from '../support/client.mjs'
 
 const reference = JSON.parse(readFileSync(new URL('../../reference/openjson-isnull.json', import.meta.url)))
 const keep = result => canonical({
@@ -18,30 +18,17 @@ const keep = result => canonical({
 })
 const reset = 'DROP TRIGGER IF EXISTS docs_audit; DROP FUNCTION IF EXISTS dbo.foo; DROP TABLE IF EXISTS items; DROP TABLE IF EXISTS audit; DROP TABLE IF EXISTS docs; DROP TABLE IF EXISTS tn;'
 
-// Remaining differences are outside this lowering (docs/openjson-isnull.md):
-// COALESCE, IIF, CASE and comparisons that mix a direct OPENJSON carrier
-// column with text still fail with 245 (or DuckDB's binder error) until the
-// predicate catalog declares OPENJSON columns; ISNULL of a code-page first
-// argument with a non-cp1252 carrier fails on the wire; the type column is
-// int; COALESCE widths over OPENJSON keys are max; and the unicode
-// comparison of ISNULL results keeps trailing spaces. Each known case
-// asserts msduck's complete current result, so any further change, fix or
-// regression, fails here.
+// Remaining descriptor/conversion differences are recorded in full below.
+// Direct default-schema carrier/text mixes now match the SQL Server capture.
+// WITH-schema operations execute but retain metadata/ANSI comparison gaps;
+// derived function columns are still unknown to the predicate catalog.
+// Every known case asserts the complete current result, including rows/errors
+// and DONE counts; no fixture value is replaced or filtered to claim parity.
 const knownResults = {
-  "report nvarchar document": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'x' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... j.\"key\", __msduck_isnull(j.\"value\", ''), COALESCE(j.\"value\", 'x'), CASE WHEN j.\"value\" IS NULL THEN 'n' ELSE j.\"value...\n                                                                         ^"}],"done":[1,null]}),
-  "report varchar document": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'x' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... j.\"key\", __msduck_isnull(j.\"value\", ''), COALESCE(j.\"value\", 'x'), CASE WHEN j.\"value\" IS NULL THEN 'n' ELSE j.\"value...\n                                                                         ^"}],"done":[1,null]}),
-  "report bounded nvarchar document": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'x' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... j.\"key\", __msduck_isnull(j.\"value\", ''), COALESCE(j.\"value\", 'x'), CASE WHEN j.\"value\" IS NULL THEN 'n' ELSE j.\"value...\n                                                                         ^"}],"done":[1,null]}),
-  "report literal document": () => ({"sets":[{"columns":[["key","NVarChar",8000],["","NVarChar",65535],["","NVarChar",65535],["","NVarChar",65535],["","IntN",4]],"rows":[]}],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'x' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... j.\"key\", __msduck_isnull(j.\"value\", ''), COALESCE(j.\"value\", 'x'), CASE WHEN j.\"value\" IS NULL THEN 'n' ELSE j.\"value...\n                                                                         ^"}],"done":[null]}),
   "isnull key and value types": () => ({"sets":[{"columns":[["key","NVarChar",8000],["k","NVarChar",8000],["v","NVarChar",65535],["va","NVarChar",65535],["t","Int",null],["n","IntN",8],["b","IntN",8]],"rows":[["a","a","1","1",2,"1","2"],["b","b","","ansi",0,"0","0"],["c","c","x ","x ",1,"1","4"],["d","d","🦆","🦆",1,"2","4"],["e","e","[1,2]","[1,2]",4,"5","10"],["f","f","true","true",3,"4","8"],["g","g","","",1,"0","0"]]}],"errors":[],"done":[1,7]}),
-  "coalesce mixes": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'ansi' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...\"key\", COALESCE(j.\"value\", j.\"key\") AS vk, COALESCE(j.\"value\", 'ansi') AS va, COALESCE(j.\"value\", NULL, 'z') AS vz, COALESCE...\n                                                                          ^"}],"done":[1,null]}),
   "carrier as replacement": () => ({"sets":[],"errors":[{"number":50000,"class":16,"state":1,"message":"VARCHAR value is not representable in Windows-1252"}],"done":[1,1,null]}),
-  "iif and case": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'n' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: SELECT j.\"key\", CASE WHEN j.\"value\" IS NULL THEN 'n' ELSE j.\"value\" END AS i1, CASE WHEN j.\"type\" = 2 THEN...\n                                                         ^"}],"done":[1,null]}),
-  "case comparisons": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value '1' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: SELECT j.\"key\", CASE j.\"value\" WHEN '1' THEN 'one' WHEN 'x' THEN 'ex' ELSE j.\"key\" END AS c1...\n                                            ^"}],"done":[1,null]}),
-  "isnull in predicates and ordering": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value '' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...('$'))) AS x (r)) j WHERE __msduck_isnull(j.\"value\", '') <> '' AND __msduck_isnull(j.\"value\", '') <> 'x' ORDER BY __msd...\n                                                                       ^"}],"done":[1,null]}),
-  "comparison with literal": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'x' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...), __msduck_carrier_input('$'))) AS x (r)) j WHERE j.\"value\" = 'x' OR j.\"value\" = '1' OR j.\"value\" IN ('true', '') ORDER...\n                                                                          ^"}],"done":[1,null]}),
-  "explicit schema": () => ({"sets":[],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value 'n' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...') AS b, COALESCE(w.c, 'cc') AS c, CASE WHEN w.b IS NULL THEN 'n' ELSE w.b END AS i, CASE WHEN w.c = 'x' THEN CAST(__msdu...\n                                                                         ^"}],"done":[1,null]}),
-  "explicit schema varchar document": () => ({"sets":[],"errors":[{"number":50000,"class":16,"state":1,"message":"Binder Error: Cannot mix values of type VARCHAR and STRUCT(__msduck_utf16le BLOB) in COALESCE operator - an explicit cast is required"}],"done":[1,null]}),
-  "two sources full join": () => ({"sets":[{"columns":[["id","Int",null],["k","NVarChar",65535],["l","NVarChar",65535],["r","NVarChar",65535]],"rows":[[1,"a","1",null],[1,"b","2","3"],[1,"c",null,"4"],[1,"s","x","x  "],[2,"x",null,"1"]]}],"errors":[],"done":[5]}),
+  "explicit schema": () => ({"sets":[{"columns":[["a","NVarChar",20],["b","NVarChar",65535],["c","NVarChar",65535],["i","NVarChar",65535],["e","Int",null],["j","NVarChar",65535]],"rows":[["1","nb","x ","n",0,"[1,2]"]]}],"errors":[],"done":[1,1]}),
+  "two sources full join": () => ({"sets":[{"columns":[["id","Int",null],["k","NVarChar",65535],["l","NVarChar",65535],["r","NVarChar",65535]],"rows":[[1,"a","1",null],[1,"b","2","3"],[1,"c",null,"4"],[2,"x",null,"1"]]}],"errors":[],"done":[4]}),
   "two sources through function": () => ({"sets":[{"columns":[["id","Int",null],["key","NVarChar",65535],["old_value","NVarChar",65535],["new_value","NVarChar",65535],["o","NVarChar",65535],["n","NVarChar",65535]],"rows":[]}],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value '-' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... __msduck_isnull(x.old_value, '-') AS o, COALESCE(x.new_value, '-') AS n FROM items i LEFT OUTER JOIN LATERAL (SELECT __ms...\n                                                                          ^"}],"done":[null]}),
 }
 
@@ -63,4 +50,1453 @@ test('ISNULL, COALESCE, IIF and CASE over OPENJSON match the SQL Server capture'
   }
   assert.deepEqual(differences, [])
   assert.deepEqual(differingFromReference, Object.keys(knownResults))
+})
+
+
+test('OPENJSON WITH columns do not capture scalar variables', async t => {
+  const connection = await start(t)
+  const result = await query(connection, `DECLARE @p INT=7;
+    SELECT ISNULL(@p, N'x') AS scalar_value
+    FROM OPENJSON(N'{"@p":"column"}') WITH ([@p] NVARCHAR(12)) j;`)
+  assert.deepEqual(result.rows, [[7]])
+  const columns = result.columns.at(-1)
+  assert.equal(columns[0].type.name, 'Int')
+})
+
+// Raw SQL Server 17.0.4065.4 captures: isolated units remain unmodified.
+const rawAlternativeCases = [
+  {
+    "name": "isolated alternatives",
+    "query": "SELECT j.[key],COALESCE(j.[value],N'z') AS c,CASE WHEN j.[value] IS NULL THEN N'z' ELSE j.[value] END AS k,IIF(j.[value] IS NULL,N'z',j.[value]) AS i FROM OPENJSON(N'{\"a\":\"\\ud800\",\"b\":null,\"c\":\"\\udc00\"}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ],
+            [
+              "c",
+              "NVarChar",
+              65535
+            ],
+            [
+              "k",
+              "NVarChar",
+              65535
+            ],
+            [
+              "i",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "a",
+              "\ud800",
+              "\ud800",
+              "\ud800"
+            ],
+            [
+              "b",
+              "z",
+              "z",
+              "z"
+            ],
+            [
+              "c",
+              "\udc00",
+              "\udc00",
+              "\udc00"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  },
+  {
+    "name": "bounded common",
+    "query": "SELECT j.id,COALESCE(j.v,CAST(N'abcde' AS NVARCHAR(5))) AS v FROM OPENJSON(N'[{\"id\":1,\"v\":\"\\ud800xy\"},{\"id\":2,\"v\":null}]') WITH(id INT,v NVARCHAR(2)) j ORDER BY j.id",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "id",
+              "IntN",
+              4
+            ],
+            [
+              "v",
+              "NVarChar",
+              10
+            ]
+          ],
+          "rows": [
+            [
+              1,
+              "\ud800x"
+            ],
+            [
+              2,
+              "abcde"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "integer precedence",
+    "query": "SELECT COALESCE(j.[value],7) AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "IntN",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ],
+            [
+              7
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+{
+  "name": "integer set",
+  "query": "SELECT COALESCE(j.[value],N'2') AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "smallint set",
+  "query": "SELECT COALESCE(j.[value],N'2') AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j UNION ALL SELECT CAST(7 AS SMALLINT)",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            2
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "nested alternatives",
+  "query": "SELECT COALESCE(COALESCE(j.[value],N'x'),N'y') AS c,CASE WHEN j.[value] IS NULL THEN COALESCE(j.[value],N'x') ELSE N'y' END AS k,COALESCE(IIF(j.[value] IS NULL,N'x',j.[value]),N'y') AS i FROM OPENJSON(N'{\"a\":null}') j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            65535
+          ],
+          [
+            "k",
+            "NVarChar",
+            65535
+          ],
+          [
+            "i",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x",
+            "x",
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi best fit",
+  "query": "SELECT COALESCE(j.[value],'\u6f22') AS c FROM OPENJSON(N'{\"a\":null}') j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "?"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi supplementary",
+  "query": "SELECT COALESCE(j.v,'\ud83e\udd86') AS c FROM OPENJSON(N'{\"v\":null}') WITH(v NVARCHAR(1)) j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            "??"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct union",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j UNION SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct intersect",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j INTERSECT SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct except",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j EXCEPT SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": []
+      }
+    ],
+    "errors": [],
+    "done": [
+      0
+    ]
+  }
+},
+{
+  "name": "nested numeric distinct",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"01\"}') j UNION SELECT N'1' UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            1
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "parenthesized numeric distinct",
+  "query": "(SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"01\"}') j UNION SELECT N'1') UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            1
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "case representatives first lower",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'X'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "case representatives first upper",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"X\"}') j UNION SELECT N'x'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "X"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi subtree distinct",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"y\"}') j UNION ALL (SELECT CAST('A' AS VARCHAR(2)) UNION SELECT CAST('A ' AS VARCHAR(4)))",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "A"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "ansi set best fit",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"y\"}') j UNION ALL SELECT '\u6f22'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "?"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "ansi supplementary set width",
+  "query": "SELECT COALESCE(j.v,N'x') AS v FROM OPENJSON(N'{\"v\":\"y\"}') WITH(v NVARCHAR(1)) j UNION ALL SELECT '\ud83e\udd86'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "??"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "projection alias source value",
+  "query": "SELECT COALESCE(value,N'x') AS value FROM OPENJSON(N'[null]')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "projection aliases raw source",
+  "query": "SELECT COALESCE(value,N'x') AS value,COALESCE([key],N'z') AS [key] FROM OPENJSON(N'{\"a\":\"\\ud800\",\"b\":null}') ORDER BY [key]",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ],
+          [
+            "key",
+            "NVarChar",
+            8000
+          ]
+        ],
+        "rows": [
+          [
+            "\ud800",
+            "a"
+          ],
+          [
+            "x",
+            "b"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "case condition collation only",
+  "query": "SELECT CASE WHEN N'a' COLLATE Latin1_General_100_BIN2 = N'a' THEN j.[value] ELSE N'x' END AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'x ' ",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "iif condition collation only",
+  "query": "SELECT IIF(N'a' COLLATE Latin1_General_100_BIN2 = N'a',j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'x ' ",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ordered coalesce NULL source",
+  "query": "SELECT j.[value] FROM OPENJSON(N'[null]') j ORDER BY COALESCE(j.[value],N'x')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ordered alternative scopes",
+  "query": "SELECT j.[key],j.[value] FROM OPENJSON(N'{\"a\":null,\"b\":\"x\",\"c\":\"A\"}') j ORDER BY COALESCE(j.[value],N'z')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "key",
+            "NVarChar",
+            8000
+          ],
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "c",
+            "A"
+          ],
+          [
+            "b",
+            "x"
+          ],
+          [
+            "a",
+            null
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+}
+]
+
+test('OPENJSON alternatives preserve captured raw units, bounded widths and numeric precedence', async t => {
+  const connection = await start(t)
+  for (const entry of rawAlternativeCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})
+
+// Six complete SQL Server 17.0.4065.4 captures for direct set branches.
+const directSetCases = [
+  {
+    "name": "direct unpaired union all",
+    "query": "SELECT j.value AS v FROM OPENJSON(N'[\"\\ud800\"]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct bounded union all",
+    "query": "SELECT j.v FROM OPENJSON(N'{\"v\":\"\\ud800\"}') WITH(v NVARCHAR(2)) j UNION ALL SELECT CAST(N'abcd' AS NVARCHAR(4))",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              8
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "abcd"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct distinct numeric boundary",
+    "query": "(SELECT j.value AS v FROM OPENJSON(N'[\"01\",\"1\"]') j UNION SELECT N'1') UNION ALL SELECT 7",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "IntN",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ],
+            [
+              1
+            ],
+            [
+              7
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  },
+  {
+    "name": "direct default distinct",
+    "query": "SELECT j.value AS v FROM OPENJSON(N'[\"x \"]') j UNION SELECT N'X' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x "
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "direct cast union all",
+    "query": "SELECT CAST(j.value AS NVARCHAR(2)) AS v FROM OPENJSON(N'[\"\\ud800\"]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct isnull union all",
+    "query": "SELECT ISNULL(j.value,N'z') AS v FROM OPENJSON(N'[\"\\ud800\",null]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "z"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  }
+]
+
+test('direct OPENJSON sets preserve captured UTF-16 units and nested type boundaries', async t => {
+  const connection = await start(t)
+  for (const entry of directSetCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})
+
+// Pinned SQL Server 17.0.4065.4: BIN2 keys and input-derived value/WITH collations.
+const sourceCollationCases = [
+  {
+    "name": "key binary equality",
+    "query": "SELECT j.[key] FROM OPENJSON(N'{\"A\":1,\"a\":2}') j WHERE j.[key]=N'a' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ]
+          ],
+          "rows": [
+            [
+              "a"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "value explicit case sensitivity",
+    "query": "SELECT j.[key],j.value FROM OPENJSON(N'{\"a\":\"x\",\"b\":\"X\"}' COLLATE Latin1_General_100_CS_AS) j WHERE j.value=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ],
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "a",
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "with explicit comparison",
+    "query": "SELECT j.v FROM OPENJSON(N'[{\"v\":\"x\"},{\"v\":\"X\"}]' COLLATE Latin1_General_100_CS_AS) WITH(v NVARCHAR(2)) j WHERE j.v=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "stored input",
+    "query": "CREATE TABLE input_json(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT input_json VALUES(N'{\"a\":\"x\",\"b\":\"X\"}'); SELECT j.value FROM input_json s CROSS APPLY OPENJSON(s.doc) j WHERE j.value=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "key order",
+    "query": "SELECT j.[key] FROM OPENJSON(N'{\"a\":1,\"A\":2}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ]
+          ],
+          "rows": [
+            [
+              "A"
+            ],
+            [
+              "a"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "chained stored input",
+    "query": "CREATE TABLE chained_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT chained_input VALUES(N'[\"[\\\"x\\\",\\\"X\\\"]\"]'); SELECT k.value FROM chained_input d CROSS APPLY OPENJSON(d.doc) j CROSS APPLY OPENJSON(j.value) k WHERE k.value=N'x';",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "binary round trip comparison",
+    "query": "SELECT j.value FROM OPENJSON(CAST(CAST(N'[\"x\",\"X\"]' COLLATE Latin1_General_100_CS_AS AS VARBINARY(MAX)) AS NVARCHAR(MAX))) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ],
+            [
+              "X"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  }
+]
+
+test('OPENJSON predicates and ordering follow declared source collations', async t => {
+  const connection = await start(t)
+  for (const entry of sourceCollationCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})
+
+// Complete behavioral captures; wire-collation parity remains a documented gap.
+const expressionCollationCases = [
+  {
+    "name": "append literal",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(t.doc+N'') j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "prepend literal",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(N''+t.doc) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "coalesce",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(COALESCE(t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "isnull",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(ISNULL(t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "case",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CASE WHEN 1=1 THEN t.doc ELSE N'[]' END) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "iif",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(IIF(1=1,t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "concat",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CONCAT(t.doc,N'')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "concat_ws",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CONCAT_WS(N'',t.doc,N'')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "json_query",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(JSON_QUERY(t.doc)) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "replace",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(REPLACE(t.doc,N'not-present',N'x')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "substring",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(SUBSTRING(t.doc,1,4000)) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  }
+]
+
+test('OPENJSON character expressions preserve captured collation comparisons', async t => {
+  const connection = await start(t)
+  await query(connection, `CREATE TABLE expression_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT expression_input VALUES(N'["x","X"]');`)
+  for (const entry of expressionCollationCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
 })

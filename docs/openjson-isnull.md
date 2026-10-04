@@ -24,17 +24,70 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
   functions and APPLY, which the predicate catalog cannot type.
 - The NVARCHAR and NCHAR widths that ISNULL applies for a known bounded
   first argument (`__msduck_isnull_nvarchar_width`,
-  `__msduck_isnull_nchar_width`) accept VARCHAR text and carriers and
-  return text, as the predicate pins convert carrier columns mixed with
-  text. Previously a carrier from an aggregate subquery, as in
-  `N'text' + ISNULL((SELECT MAX(v) FROM ...), N'')`, reached the
-  VARCHAR-only width function and failed to bind (found while verifying
-  #901); a carrier result would also have failed in comparisons with
-  literals. An unpaired surrogate in such a bounded result becomes U+FFFD.
+  `__msduck_isnull_nchar_width`) preserve their input family. Text returns
+  text; a carrier returns a carrier bounded directly in UTF-16 units,
+  with NCHAR padding and NULL validity preserved. No lossy Unicode decoding
+  occurs on the carrier path. This includes aggregate-subquery results.
+- Scalar-query binding avoids repeating the first query across native type
+  prototypes; see [binding evidence and scope guards](isnull-subquery-binding.md).
+
 
 The multirow trigger from the report, ISNULL over OPENJSON keys and values
 in projections and stored results, and ISNULL over aggregated subqueries now
 match SQL Server.
+
+The predicate catalog now declares direct OPENJSON sources before lowering:
+`key` is NVARCHAR(4000), `value` is NVARCHAR(MAX), and `type` is integer.
+WITH columns use their explicit declarations: NVARCHAR/NCHAR are carriers,
+VARCHAR/CHAR are backend text, and other types stay non-text. These declarations
+come from the AST, independent of the document value or returned rows. Query
+and SELECT frames keep nested/sibling sources separate and give local aliases
+priority over correlated outer sources. Projection aliases do not shadow source
+columns inside SELECT expressions; ORDER BY consumers resolve output aliases
+against the projection explicitly. ORDER BY alternative expressions are
+rewritten under their completed query’s SELECT scope; that scope is not
+visible while preceding CTE definitions are visited. Scalar-query projection checks use that
+query's frame; set-operation pinning resolves each branch separately. Default
+and explicit aliases are recognized; ambiguous aliases, derived/CTE columns and
+renamed column lists remain unknown. Same-named physical tables retain the
+existing conservative shared description. Quoted `[@p]` columns stay distinct from unquoted scalar `@p`.
+ISNULL keeps its direct OPENJSON carrier first argument: its native dispatch
+already packs replacements into that type, so declaration pinning must not
+convert it to text and lose exact UTF-16 units or change stored values. Character-only COALESCE, IIF and CASE alternatives with direct OPENJSON
+sources instead convert each result branch to a common Unicode carrier
+declaration. This preserves raw UTF-16 through literals, declared parameters
+and ANSI columns, while conditions and selected operands retain their original
+evaluation. Nested admitted alternatives retain this carrier provenance. ANSI branches
+convert through their declared CP1252 family before Unicode promotion; under
+the supported non-SC collations a supplementary ANSI literal contributes two
+best-fit bytes. Numeric and unresolved alternatives keep the existing path.
+Comparisons of bounded scalar-query ISNULL results with declared character
+CAST/TRY_CAST and width adapters use the same default character equality key.
+The bottom-up translator may already have replaced CAST syntax with a typed
+adapter; only explicitly known character producers are admitted, leaving
+numeric-returning or unknown functions on the existing coercion path.
+Set branches align each immediate child result using its own query scope.
+An inner DISTINCT finishes in its own character domain before a numeric parent
+converts its completed output: `01 UNION 1 UNION ALL 7` therefore retains both
+rows that become integer 1. ANSI child results convert through their own
+declarations before Unicode promotion. Character branches use their common
+Unicode declaration; proved numeric peers retain
+SQL Server numeric precedence via explicit conversions of the completed branch
+result. Unknown peers stay unresolved. The physical alternative’s internal
+conversion remains unchanged. Distinct UNION and INTERSECT/EXCEPT membership
+use the existing default character equality keys and NULL-safe equality, while
+preserving the selected raw payload and materializing membership inputs once.
+For the captured UNION cases, input-branch priority retains the first branch’s
+case-equivalent payload. This is evidence for those queries, not a universal
+claim about SQL Server representative selection under arbitrary execution plans.
+The default key is gated against explicit unknown or nondefault collations and
+declared nondefault column collations.
+Only conditional result operands contribute to that domain: a CASE/IIF
+predicate’s COLLATE does not change the result’s equality. Quoted collation
+names use their identifier value, as in the collation validator. Such domains retain the existing native
+set path; their full collation-aware set compatibility remains unproved.
+This lets the existing comparison and alternative-expression lowering handle
+COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
 
 ## Evidence
 
@@ -53,7 +106,8 @@ match SQL Server.
   collation.
 - `tests/compat/openjson_isnull.test.mjs` replays every case through
   tedious, comparing column names, types and lengths, rows, errors and DONE
-  counts. Known differences assert msduck's complete current result.
+  counts. Known differences assert msduck's complete current result. Ten previously
+  failing complete cases now use the unchanged reference expectations.
 - `tests/openjson_isnull.rs` checks the native ISNULL dispatch (carrier code
   units including an unpaired surrogate, carrier replacements of text,
   integer and date first arguments), stored ISNULL results over OPENJSON,
@@ -65,32 +119,20 @@ match SQL Server.
 
 The tedious test lists them exactly:
 
-- COALESCE, IIF, CASE results and comparisons (`=`, `<>`, `>`, IN, simple
-  CASE) that mix a direct OPENJSON `key`/`value` column, or an explicit WITH
-  NVARCHAR column, with text still fail with 245, or with DuckDB's binder
-  error for COALESCE of a VARCHAR and an NVARCHAR WITH column. The same
-  holds for comparisons of `ISNULL(j.[value], N'')` with a literal. The
-  predicate catalog in `src/engine/ext/keys/predicates/catalog.rs` treats
-  OPENJSON aliases as derived tables of unknown type; declaring their
-  columns (key NVARCHAR(4000), value NVARCHAR(MAX), WITH columns by
-  declaration) lets the existing marking and pinning handle them. That file
-  belonged to the default-collation task while this one ran; a prototype
-  made 9 more of the 21 cases match.
-- Two carriers compare by their bytes, so `ISNULL(l.[value], N'') <>
-  ISNULL(r.[value], N'')` treats `'x'` and `'x  '` as different; SQL
-  Server ignores trailing spaces.
-- `COALESCE(l.[key], r.[key])` and `COALESCE` over OPENJSON WITH columns
-  report `nvarchar(max)`; SQL Server keeps the declared width.
+- Explicit WITH schemas now execute, but COALESCE may still advertise
+  NVARCHAR(MAX) instead of the declared VARCHAR(10) or NVARCHAR(10).
+  In the retained mixed-schema case, a VARCHAR value `'x '` compared with
+  `N'x'` still returns false instead of SQL Server's true. Catalog recognition
+  does not repair the later ANSI comparison or result descriptor adapters.
+- The two direct OPENJSON FULL JOIN sources now ignore trailing spaces in
+  their ISNULL comparison, matching the captured rows and DONE count. The
+  COALESCE key descriptor remains NVARCHAR(MAX), rather than NVARCHAR(4000).
+- OPENJSON columns propagated through an inline function remain unknown to
+  this conservative statement catalog; the captured function query still
+  fails when COALESCE mixes its returned carrier with text.
 - ISNULL with a VARCHAR first argument and a carrier replacement holding
   characters outside Windows-1252 fails on the wire instead of returning
   `?`; the same happens for VARCHAR and NVARCHAR variables.
-- Bounded NVARCHAR/NCHAR ISNULL results are text, so an isolated
-  surrogate in a carrier first argument becomes U+FFFD. Stored columns
-  already behaved this way through the predicate pins before this change
-  (verified against the previous lowering with a TDS-parameter value); the
-  aggregate-subquery form previously failed to bind. Keeping exact units
-  needs carrier-aware comparison of these results, which belongs to the
-  predicate lowering.
 - A non-text replacement of a Unicode first argument converts with
   DuckDB's text cast, so `ISNULL(j.[value], CAST(1 AS BIT))` returns
   `true` and dates lose their SQL Server style. NVARCHAR variables and
@@ -99,3 +141,97 @@ The tedious test lists them exactly:
   which the bind-time macro cannot reach.
 - The OPENJSON `type` column is `int`; SQL Server reports `tinyint`, so
   `ISNULL(j.[type], 0)` is `int` too.
+
+### Additional raw-unit evidence
+
+Native tests cover isolated high/low surrogates through COALESCE, CASE and IIF,
+NULL fallbacks from literals, declared parameters and ANSI columns, bounded
+NVARCHAR widths, common NCHAR widths, carrier peers and UNION branches. Native
+sequence controls check that selected volatile leaves execute once and unselected
+fallbacks do not execute. The fixed-width result adapter introduced after root
+annotation preserves native carriers rather than stringifying their STRUCT.
+
+Additional pinned SQL Server 17.0.4065.4 captures distinguish dynamic NCHAR(3)
+with VARCHAR(5) alternatives (NVARCHAR(5)) from constant-folded COALESCE. They
+also expose a remaining source conversion difference: an OPENJSON NCHAR(3)
+containing only U+D800 is short in SQL Server, and conversion to the common
+NCHAR(5) yields U+D800, two NUL units and two spaces. msduck currently pads the
+source with spaces and yields U+D800 followed by four spaces. The native test
+records msduck’s current value; it does not establish SQL Server parity for that
+source conversion. Full-width NCHAR source controls avoid this separate gap.
+
+The additional set tests retain complete rows rather than trimming values to
+force equality. Distinct character sets compare keys and select an unchanged
+payload from the first branch when default character keys compare equal;
+within that branch, the binary key resolves remaining representation ties.
+Membership wrappers name their generated CTE output columns explicitly and
+avoid referenced user relation names. Nested distinct operators retain their
+own equality behavior beneath UNION ALL; parenthesized ANSI literals retain
+their full best-fit width.
+
+### Scalar character predicate declarations
+
+Scalar-first ISNULL with a declared NVARCHAR/NCHAR result uses character keys
+for comparisons, IN and BETWEEN, and the Unicode matcher for LIKE, when
+all peers have character declarations or are NULL. Physical VARCHAR peers and
+bare character parameters retain case and trailing-space comparison semantics.
+Quoted `[@p]` names remain columns, independently of bare parameter declarations.
+Numeric and unresolved peers retain the numeric coercion path; COALESCE is
+proved character only when every non-NULL result operand is character.
+
+Twelve additional raw SQL Server 17.0.4065.4 captures cover these predicates,
+three-valued NULL membership, declaration-based ORDER BY scope, numeric
+precedence, quoted columns, IF membership and ANSI ORDER BY ranges.
+Both predicate marking and ANSI range padding retain their own SELECT scope
+through query ordering without exposing its sources to WITH definitions. Client replay compares captured
+rows, descriptor names/types/lengths, errors and completion counts. These
+focused cases do not establish full SQL Server compatibility.
+
+Direct OPENJSON set branches, explicit Unicode casts and character ISNULL
+outputs now enter the same carrier alignment as character alternatives, using
+their own declared result types. Each immediate set child finishes DISTINCT
+before a parent numeric conversion. Six additional pinned SQL Server captures
+check unpaired UTF-16 payloads, bounded result widths, ISNULL fallback rows,
+case/trailing-space equality and the nested numeric boundary. Unknown outputs
+and numeric expressions do not gain a character declaration from provenance.
+
+
+### OPENJSON source collations
+
+Default-schema keys carry Latin1_General_BIN2 independently of the input.
+Default-schema values and character WITH columns inherit an explicit input
+COLLATE or a resolved physical/source column declaration. Inheritance follows
+FROM/APPLY order, so a chained OPENJSON source sees its predecessor's completed
+collation rather than depending on hash-map iteration. It uses declaration
+facts only; unknown expressions and ambiguous references remain unresolved.
+
+Seven additional pinned SQL Server 17.0.4065.4 behavioral captures cover key case-sensitive
+equality and binary ordering, explicit value/WITH comparisons, stored input
+collation, a two-stage lateral chain and a VARBINARY round trip. Character casts
+preserve the input label; passing through a non-character domain resets it.
+The client replay retains full rows,
+descriptor names/types/lengths, errors and completion counts. Separate raw
+SQL_VARIANT_PROPERTY captures establish the input-derived labels; these checks
+do not establish complete wire collation metadata or nondefault set parity.
+
+OPENJSON input concatenation (`+`/`||`) and the character results of CASE,
+COALESCE, ISNULL and IIF retain declaration-based collation labels. Label
+precedence uses the deterministic core rules, with bounded traversal and no
+branch evaluation. Pinned SQL Server 17.0.4065.4 controls over a stored
+case-sensitive NVARCHAR(MAX) document retain only `x` from `["x","X"]` for
+append/prepend literals and each conditional form; the predecessor retained
+both rows. Native regressions preserve the original expressions and raw UTF-16
+output. Character casts retain known labels; proved noncharacter intermediate
+casts reset them. Unresolved expressions, unsupported functions, exhausted
+traversal and conflicting explicit labels do not manufacture a known label.
+This does not establish general expression or wire-collation parity. The
+additional explicit COLLATE operand in a `+` control still has a separately
+observed backend binding limitation; its complete raw error is retained with
+the reference evidence rather than counted as a matching result.
+
+The same declaration labels now pass through CONCAT/CONCAT_WS and supported
+character-source functions, including JSON_QUERY, REPLACE and SUBSTRING.
+Five further complete pinned captures verify the original function inputs and
+case-sensitive filtering without changing rows, descriptor names/types/lengths,
+errors or completion counts. Numeric CONCAT inputs contribute coercible-default
+labels; they cannot override an implicitly collated character input.

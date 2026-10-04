@@ -1,7 +1,11 @@
 //! Target conversions for UPDATE, preserving backend row atomicity.
 use anyhow::{Result, anyhow, ensure};
 use duckdb::Connection;
-use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
+use sqlparser::{
+    ast::*,
+    dialect::{DuckDbDialect, GenericDialect},
+    parser::Parser,
+};
 use std::collections::HashMap;
 
 pub fn money_assignments(
@@ -85,7 +89,7 @@ pub fn lower(db: &Connection, statement: &mut Statement, money: &[bool]) -> Resu
         let mut value = assignment.value.clone();
         if matches!(&value, Expr::Identifier(id) if id.quote_style.is_none() && id.value.eq_ignore_ascii_case("DEFAULT"))
         {
-            value = Parser::new(&GenericDialect {})
+            value = Parser::new(&DuckDbDialect {})
                 .try_with_sql(column.2.as_deref().unwrap_or("NULL"))?
                 .parse_expr()?;
         }

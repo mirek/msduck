@@ -2,7 +2,11 @@
 use crate::assignment::storage_kind as target_kind;
 use anyhow::{Result, anyhow, ensure};
 use duckdb::Connection;
-use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
+use sqlparser::{
+    ast::*,
+    dialect::{DuckDbDialect, GenericDialect},
+    parser::Parser,
+};
 
 pub fn money_columns(
     statement: &Statement,
@@ -196,7 +200,9 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
             for (value, target) in row.iter_mut().zip(&targets) {
                 if matches!(value, Expr::Identifier(id) if id.quote_style.is_none() && id.value.eq_ignore_ascii_case("DEFAULT"))
                 {
-                    *value = Parser::new(&GenericDialect {})
+                    // Defaults come from DuckDB catalog serialization, which
+                    // includes named STRUCT casts used by Unicode carriers.
+                    *value = Parser::new(&DuckDbDialect {})
                         .try_with_sql(target.2.as_deref().unwrap_or("NULL"))?
                         .parse_expr()?;
                 }
@@ -232,8 +238,32 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
                 for ((item, unicode), ansi) in select.projection.iter_mut().zip(unicode).zip(ansi) {
                     if *unicode || *ansi {
                         match item {
-                            SelectItem::UnnamedExpr(value)
-                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
+                            SelectItem::UnnamedExpr(value) => {
+                                // Packing changes the backend expression name. Retain a
+                                // declared source label for query-level set ORDER BY.
+                                let mut source = &*value;
+                                while let Expr::Nested(inner) = source {
+                                    source = inner;
+                                }
+                                let alias = match source {
+                                    Expr::Identifier(id)
+                                        if id.quote_style.is_some()
+                                            || !id.value.starts_with('@') =>
+                                    {
+                                        Some(id.clone())
+                                    }
+                                    Expr::CompoundIdentifier(ids) => ids.last().cloned(),
+                                    _ => None,
+                                };
+                                pack(value);
+                                if let Some(alias) = alias {
+                                    *item = SelectItem::ExprWithAlias {
+                                        expr: value.clone(),
+                                        alias,
+                                    };
+                                }
+                            }
+                            SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
                             _ => unreachable!(),
                         }
                     }
@@ -315,7 +345,7 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
     *subquery = source;
     for column in omitted_defaults {
         let kind = target_kind(&column.1).expect("filtered target default");
-        let value = Parser::new(&GenericDialect {})
+        let value = Parser::new(&DuckDbDialect {})
             .try_with_sql(column.2.as_deref().expect("filtered default"))?
             .parse_expr()?;
         select.projection.push(SelectItem::UnnamedExpr(

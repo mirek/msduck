@@ -276,6 +276,35 @@ pub fn statement<T: VisitMut>(
 /// legacy Unicode producer to STRUCT here would break still-text-only functions.
 /// Run after binding so wrappers cannot erase declarations during inference.
 pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
+    fn carrier_result(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(inner) => carrier_result(inner),
+            Expr::Function(function)
+                if matches!(
+                    function.name.to_string().as_str(),
+                    "__msduck_cast_carrier_nvarchar"
+                        | "__msduck_cast_carrier_nchar"
+                        | "__msduck_carrier_input"
+                        | "__msduck_binary_nvarchar"
+                        | "__msduck_binary_nchar"
+                        | "__msduck_try_binary_nvarchar"
+                        | "__msduck_try_binary_nchar"
+                ) =>
+            {
+                true
+            }
+            _ if msduck_sql::expression_metadata::conditional::candidate(expr) => {
+                let values: Vec<_> = msduck_sql::expression_metadata::conditional::values(expr)
+                    .into_iter()
+                    .filter(|value| {
+                        !msduck_sql::expression_metadata::conditional::literal_null(value)
+                    })
+                    .collect();
+                !values.is_empty() && values.into_iter().all(carrier_result)
+            }
+            _ => false,
+        }
+    }
     fn aggregate_result(expr: &Expr) -> bool {
         match expr {
             Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => aggregate_result(inner),
@@ -349,7 +378,8 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     if msduck_sql::money_cast::money_type(data_type).is_some());
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
-                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"
+                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE" | "ISNULL" | "__MSDUCK_CARRIER_INPUT"
+                    | "__MSDUCK_UNICODE_VALUE" | "__MSDUCK_UNICODE_MAYBE"
                     | "__MSDUCK_MIN_BIN2_UNICODE" | "__MSDUCK_MAX_BIN2_UNICODE"
                     | "__MSDUCK_MIN_BIN2_ANSI" | "__MSDUCK_MAX_BIN2_ANSI"));
             // Scoped BIN2 annotations must survive until aggregate lowering.
@@ -381,11 +411,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let aggregate_result = matches!(expr, Expr::Cast { expr: source, .. }
                 if aggregate_result(source));
             let known_carrier = matches!(expr, Expr::Cast { expr: source, .. }
-                if matches!(source.as_ref(), Expr::Function(f)
-                    if matches!(f.name.to_string().as_str(),
-                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar"
-                        | "__msduck_binary_nvarchar" | "__msduck_binary_nchar"
-                        | "__msduck_try_binary_nvarchar" | "__msduck_try_binary_nchar")));
+                if carrier_result(source));
             if (consumer
                 || json_result
                 || extrema_result

@@ -108,13 +108,18 @@ fn rewrite<T: Visit + VisitMut + 'static>(
         && (node as &dyn std::any::Any)
             .downcast_ref::<Statement>()
             .is_some_and(group::sites);
-    if !catalog.has_carriers() && !catalog.has_collations() && !likes(node) && !grouped {
+    // A conditional/set site alone does not establish character inputs.
+    // Preserve typed temporal/currency binding when this catalog has no
+    // carrier or collation facts; OPENJSON declarations are loaded above.
+    let scalar_only =
+        !catalog.has_carriers() && !catalog.has_collations() && !likes(node) && !grouped;
+    if scalar_only && !mark::scalar_character_predicates(&catalog, parameters, node) {
         return Ok(());
     }
-    mark::rewrite(&catalog, parameters, node)?;
-    if pin::sites(node) && pin::rewrite(&catalog, node, false) {
+    mark::rewrite(&catalog, parameters, node, scalar_only)?;
+    if pin::sites(node) && pin::rewrite(&catalog, parameters, node, false) {
         catalog.declare(db, node)?;
-        pin::rewrite(&catalog, node, true);
+        pin::rewrite(&catalog, parameters, node, true);
     }
     if ordered && let Some(statement) = (node as &mut dyn std::any::Any).downcast_mut::<Statement>()
     {

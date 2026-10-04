@@ -113,10 +113,20 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
     if carriers.is_empty() {
         return;
     }
-    struct Rewrite<'a>(&'a Catalog, HashSet<String>);
+    struct Rewrite<'a>(&'a Catalog, HashSet<String>, Vec<Catalog>);
+    impl Rewrite<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.2.last().unwrap_or(self.0)
+        }
+    }
     impl VisitorMut for Rewrite<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let mut scope = self.catalog().query_scope(query);
+            if let SetExpr::Select(select) = query.body.as_ref() {
+                scope = scope.select_scope(select);
+            }
+            self.2.push(scope);
             let (Some(order), SetExpr::Select(select)) = (&mut query.order_by, query.body.as_ref())
             else {
                 return ControlFlow::Continue(());
@@ -130,14 +140,17 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             let mut rewritten = Vec::with_capacity(items.len());
             for item in items.drain(..) {
                 let target = column(&item.expr, select)
-                    .filter(|c| last_name(c).is_some_and(|n| self.1.contains(&n)))
+                    .filter(|c| {
+                        last_name(c).is_some_and(|n| self.1.contains(&n))
+                            && self.catalog().carrier(c).is_some()
+                    })
                     .cloned();
                 // The collation of the carrier column the item names, when it
                 // compares differently from the default.
                 let collation = target
                     .as_ref()
-                    .filter(|t| self.0.carrier(t).is_some())
-                    .and_then(|t| self.0.collation(t))
+                    .filter(|t| self.catalog().carrier(t).is_some())
+                    .and_then(|t| self.catalog().collation(t))
                     .filter(|name| {
                         use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
                         sensitivity(name) == Some(Sensitivity::Other)
@@ -172,6 +185,10 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             *items = rewritten;
             ControlFlow::Continue(())
         }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            self.2.pop();
+            ControlFlow::Continue(())
+        }
     }
-    let _ = VisitMut::visit(statement, &mut Rewrite(catalog, carriers));
+    let _ = VisitMut::visit(statement, &mut Rewrite(catalog, carriers, Vec::new()));
 }
