@@ -114,18 +114,6 @@ impl Load {
         }
     }
 
-    fn fail(&mut self, errors: &[SqlError]) {
-        if self.failure.is_none() {
-            let mut tokens = Vec::new();
-            for error in errors {
-                tds::sql_error(&mut tokens, error);
-            }
-            let number = errors.last().map_or(0, |error| error.number);
-            self.failure = Some((tokens, number));
-        }
-        self.discard();
-    }
-
     fn fail_with(&mut self, error: &anyhow::Error) {
         if self.failure.is_none() {
             let mut tokens = Vec::new();
