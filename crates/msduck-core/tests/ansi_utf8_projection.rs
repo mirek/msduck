@@ -342,7 +342,19 @@ fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
                 limits(0, 0)
             )
             .unwrap()
-            .map(raw),
+            .map(|value| match value {
+                ProjectedValue::Native(value) => {
+                    let ProjectionTarget::Native(expected) = target else {
+                        panic!("expected UTF16 output")
+                    };
+                    assert_eq!(value.view().encoding(), expected);
+                    value.view().bytes().to_vec()
+                }
+                ProjectedValue::SqlUtf16(units) => {
+                    assert_eq!(target, ProjectionTarget::SqlUtf16);
+                    units.into_iter().flat_map(u16::to_le_bytes).collect()
+                }
+            }),
             Some(vec![])
         );
         assert_eq!(
