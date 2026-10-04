@@ -113,6 +113,9 @@ filled it.
 - Never delete another worker's live files. Check with
   `lsof +D /tmp/<dir>` before removing anything you did not create, and remove
   stale directories only when no process holds them.
+- Some tools cannot read `/tmp`. A Snap-packaged `gh`, for example, sees its
+  own private `/tmp`, so write files passed to it (PR bodies, publication
+  change files) under your worktree's ignored `artifacts/` instead.
 - Never touch other sessions' harness directories, such as
   `/tmp/claude-<uid>/`. Deleting a live session's directory breaks every shell
   command in that session until it is restarted.
