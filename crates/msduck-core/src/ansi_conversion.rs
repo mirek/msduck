@@ -5,6 +5,7 @@ use crate::ansi_bytes::{AnsiBytes, AnsiView, ByteError, EncodingIdentity};
 use std::fmt;
 
 pub mod capacity;
+pub mod stored_utf8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectionTarget {
