@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {isDeepStrictEqual} from 'node:util'
 import {readFile, mkdir, mkdtemp, writeFile, realpath, symlink, link, rm, truncate} from 'node:fs/promises'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -146,8 +147,8 @@ test('aggregate payload exhaustion still returns already retained packets and re
   await scratch(async dir=>{
     const output=join(dir,'aggregate-failed.json'),partial={format:1,containers:[],runs:[],trace:record}
     await assert.rejects(persistCapture(partial,output))
-    assert.deepEqual(JSON.parse(await readFile(output,'utf8')),partial)
-    assert.deepEqual(JSON.parse(await readFile(output+'.comparison.json','utf8')).differences,compare(partial,await load()))
+    assert.ok(isDeepStrictEqual(JSON.parse(await readFile(output,'utf8')),partial), 'complete failed capture preserved')
+    assert.ok(isDeepStrictEqual(JSON.parse(await readFile(output+'.comparison.json','utf8')).differences,compare(partial,await load())), 'complete aggregate-failure raw differences preserved')
   })
 })
 
@@ -213,7 +214,7 @@ test('derived comparison overflow preserves all bounded raw runs and an explicit
     const savedBytes = await readCaptureFile(output)
     if (!size) assert.equal(savedBytes.length,CAPTURE_LIMIT)
     const saved = JSON.parse(savedBytes.toString())
-    assert.deepEqual(saved,raw)
+    assert.ok(isDeepStrictEqual(saved,raw), 'complete raw capture preserved after comparison exhaustion')
     assert.equal(saved.comparisons,undefined)
     const sidecar = JSON.parse(await readFile(output+'.comparison.json','utf8'))
     assert.equal(sidecar.retained,true)
@@ -235,7 +236,7 @@ test('an aborted reference startup retains the partial capture and every compari
     assert.deepEqual(partial.runs,[])
     assert.ok(partial.failure.message.includes('docker'))
     assert.equal(sidecar.retained,true)
-    assert.deepEqual(sidecar.differences,compare(partial,await load()))
+    assert.ok(isDeepStrictEqual(sidecar.differences,compare(partial,await load())), 'complete failed-container raw differences preserved')
     assert.ok(sidecar.differences.some(d=>d.path==='/runs/0'))
   })
 })
