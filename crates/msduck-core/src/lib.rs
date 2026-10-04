@@ -5,6 +5,7 @@ pub mod ansi_conversion;
 pub mod bin2;
 pub mod binary_unicode;
 pub mod bounded_aggregate;
+pub mod bulk_character_admission;
 pub mod case_mapping;
 pub mod catalog;
 pub mod character;

@@ -23,6 +23,19 @@ use std::collections::HashMap;
 /// SQL Server's text for 4804.
 const PREMATURE_END: &str = "While reading current row from host, a premature end-of-message was encountered--an incoming data stream was interrupted when the server expected to see more data. The host program may have terminated. Ensure that you are using a supported client application programming interface (API).";
 
+fn declared_length_error(column: usize) -> SqlError {
+    let mut error = SqlError::new(
+        4815,
+        1,
+        format!(
+            "Received an invalid column length from the bcp client for colid {}.",
+            column + 1,
+        ),
+    );
+    error.severity = 17;
+    error
+}
+
 /// The CurCmd of a completed or failed load (captured).
 const BULK_COMMAND: u16 = 240;
 /// The CurCmd of a load that failed before any row was written.
@@ -38,7 +51,7 @@ struct Row {
     values: Vec<Parameter>,
     /// Index into [`Load::patterns`].
     pattern: usize,
-    /// Bytes of its wire values.
+    /// Converted payload bytes, at least the original wire payload size.
     size: usize,
 }
 
@@ -101,18 +114,6 @@ impl Load {
         }
     }
 
-    fn fail(&mut self, errors: &[SqlError]) {
-        if self.failure.is_none() {
-            let mut tokens = Vec::new();
-            for error in errors {
-                tds::sql_error(&mut tokens, error);
-            }
-            let number = errors.last().map_or(0, |error| error.number);
-            self.failure = Some((tokens, number));
-        }
-        self.discard();
-    }
-
     fn fail_with(&mut self, error: &anyhow::Error) {
         if self.failure.is_none() {
             let mut tokens = Vec::new();
@@ -141,24 +142,36 @@ impl Load {
         let input = std::mem::take(&mut self.unread);
         let chunk = match self.decoder.push(&input, eom) {
             Ok(chunk) => chunk,
-            Err(_) => {
+            Err(decoder_error) => {
                 // Captured: a stream without COLMETADATA (tedious sends only
                 // DONE for zero rows) fails with state 2; a row that does
                 // not match its metadata (tedious sends a short binary(n)
                 // value with length n) with state 1 and severity 17, after
                 // the metadata checks.
                 let error = match self.decoder.columns() {
-                    None => SqlError::new(4804, 2, PREMATURE_END),
+                    None => SqlError::new(4804, 2, PREMATURE_END).into(),
                     Some(columns) => {
                         let mismatch = (!self.checked).then(|| self.check(columns)).flatten();
-                        mismatch.unwrap_or_else(|| {
+                        mismatch.or_else(|| {
+                            let codec::Error::CharacterLength { column, bytes, .. } = decoder_error else {
+                                return None;
+                            };
+                            if !wire::measured_character(&columns.get(column)?.type_info) {
+                                return None;
+                            }
+                            let bound = self.plan.columns.get(column)?;
+                            let Type::Character(character) = bound.declared else { return None; };
+                            (msduck_core::bulk_character_admission::row(character, Some(bytes))
+                                == msduck_core::bulk_character_admission::Row::DeclaredLengthExceeded)
+                                .then(|| declared_length_error(column).into())
+                        }).unwrap_or_else(|| {
                             let mut error = SqlError::new(4804, 1, PREMATURE_END);
                             error.severity = 17;
-                            error
+                            error.into()
                         })
                     }
                 };
-                self.fail(&[error]);
+                self.fail_with(&error);
                 return;
             }
         };
@@ -167,7 +180,7 @@ impl Load {
         {
             self.checked = true;
             if let Some(error) = self.check(columns) {
-                self.fail(&[error]);
+                self.fail_with(&error);
                 return;
             }
         }
@@ -176,40 +189,47 @@ impl Load {
                 self.fail_with(&error);
                 return;
             }
-        }
-        // Keep at most one statement's rows (and BUFFER_LIMIT bytes)
-        // buffered: a load that fits in one statement never needs the
-        // staging table.
-        let per_statement = rows_per_statement(self.plan.columns.len());
-        while self.rows.len() > per_statement
-            || (self.buffered > BUFFER_LIMIT && !self.rows.is_empty())
-        {
-            let count = self.rows.len().min(per_statement);
-            if let Err(failure) = self.stage(session, count) {
-                self.failure = Some(failure);
-                self.discard();
+            // Bound expansion during conversion, including fixed-source
+            // padding, rather than after converting the complete chunk.
+            let per_statement = rows_per_statement(self.plan.columns.len());
+            while self.rows.len() > per_statement
+                || (self.buffered > BUFFER_LIMIT && !self.rows.is_empty())
+            {
+                let count = self.rows.len().min(per_statement);
+                if let Err(failure) = self.stage(session, count) {
+                    self.failure = Some(failure);
+                    self.discard();
+                    return;
+                }
             }
         }
     }
 
     /// SQL Server's checks of the COLMETADATA token.
-    fn check(&self, columns: &[wire::WireColumn]) -> Option<SqlError> {
+    fn check(&self, columns: &[wire::WireColumn]) -> Option<anyhow::Error> {
         if columns.len() != self.plan.columns.len() {
-            return Some(SqlError::new(4804, 3, PREMATURE_END));
+            return Some(SqlError::new(4804, 3, PREMATURE_END).into());
         }
         for (index, (wire_column, bound)) in columns.iter().zip(&self.plan.columns).enumerate() {
             let target = self.plan.target(bound);
-            if let Some(state) =
-                wire::incompatible(wire_column, &bound.declared, target.nullable, target.max)
-            {
-                return Some(SqlError::new(
-                    4816,
-                    state,
-                    format!(
-                        "Invalid column type from bcp client for colid {}.",
-                        index + 1
-                    ),
-                ));
+            let state =
+                match wire::incompatible(wire_column, &bound.declared, target.nullable, target.max)
+                {
+                    Ok(state) => state,
+                    Err(error) => return Some(error),
+                };
+            if let Some(state) = state {
+                return Some(
+                    SqlError::new(
+                        4816,
+                        state,
+                        format!(
+                            "Invalid column type from bcp client for colid {}.",
+                            index + 1
+                        ),
+                    )
+                    .into(),
+                );
             }
         }
         None
@@ -219,12 +239,34 @@ impl Load {
         let columns = self.decoder.columns().unwrap_or_default();
         let mut values = Vec::with_capacity(row.len());
         let mut pattern = Vec::new();
-        let size = row
-            .iter()
-            .map(|value| value.bytes.as_ref().map_or(0, Vec::len))
-            .sum::<usize>();
+        let mut size = 0usize;
         for (index, (value, bound)) in row.iter().zip(&self.plan.columns).enumerate() {
-            let value = wire::value(&columns[index].type_info, value.bytes.as_deref())?;
+            let original_size = value.bytes.as_ref().map_or(0, Vec::len);
+            if wire::measured_character(&columns[index].type_info)
+                && let msduck_core::types::Type::Character(character) = bound.declared
+                && msduck_core::bulk_character_admission::row(
+                    character,
+                    value.bytes.as_ref().map(Vec::len),
+                ) == msduck_core::bulk_character_admission::Row::DeclaredLengthExceeded
+            {
+                return Err(declared_length_error(index).into());
+            }
+            let value = wire::declared_value(
+                &columns[index].type_info,
+                &bound.declared,
+                value.bytes.as_deref(),
+            )?;
+            let converted_size = match &value {
+                Value::Text(text) => text.len(),
+                Value::Unicode(units) => units
+                    .len()
+                    .checked_mul(2)
+                    .ok_or_else(|| anyhow::anyhow!("bulk converted payload size overflow"))?,
+                _ => original_size,
+            };
+            size = size
+                .checked_add(original_size.max(converted_size))
+                .ok_or_else(|| anyhow::anyhow!("bulk converted row size overflow"))?;
             if matches!(value, Value::Null)
                 && !self.plan.options.keep_nulls
                 && self.plan.target(bound).default
@@ -236,6 +278,10 @@ impl Load {
                 data_type: bound.declared,
             });
         }
+        let buffered = self
+            .buffered
+            .checked_add(size)
+            .ok_or_else(|| anyhow::anyhow!("bulk converted buffer size overflow"))?;
         let pattern = match self
             .patterns
             .iter()
@@ -256,7 +302,7 @@ impl Load {
             pattern,
             size,
         });
-        self.buffered += size;
+        self.buffered = buffered;
         self.received += 1;
         Ok(())
     }
@@ -828,5 +874,92 @@ fn strip_terminated(tokens: &mut Vec<u8>) {
         .position(|window| window == token)
     {
         tokens.drain(start..start + token.len());
+    }
+}
+
+#[cfg(test)]
+mod admission_resource_tests {
+    use super::super::plan::{Bound, TargetColumn};
+    use super::*;
+    use msduck_core::character::{CharacterType, Family, Length};
+
+    fn plan(declared: Type) -> Plan {
+        Plan {
+            table: "unused".into(),
+            schema: "unused".into(),
+            backend: "unused".into(),
+            target_columns: vec![TargetColumn {
+                name: "value".into(),
+                nullable: true,
+                identity: false,
+                computed: false,
+                max: false,
+                default: false,
+            }],
+            columns: vec![Bound {
+                target: 0,
+                declared,
+                declared_text: "unused".into(),
+            }],
+            options: Default::default(),
+        }
+    }
+
+    #[test]
+    fn legacy_wire_rows_keep_their_original_conversion_and_length_handling() {
+        for (id, family, source_width, wire_width, input) in [
+            (0x27, Family::Varchar, 1, 8u8, b"AA".as_slice()),
+            (0x2f, Family::Char, 8, 1u8, b"A".as_slice()),
+        ] {
+            let declared =
+                Type::Character(CharacterType::new(family, Length::Bounded(source_width)).unwrap());
+            let mut load = Load::new(plan(declared));
+            let mut metadata = vec![0x81, 1, 0];
+            metadata.extend(0u32.to_le_bytes());
+            metadata.extend(1u16.to_le_bytes());
+            metadata.extend([id, wire_width, 9, 4, 0xd0, 0, 0x34, 1, b'v', 0]);
+            load.decoder.push(&metadata, false).unwrap();
+            assert!(load.check(load.decoder.columns().unwrap()).is_none());
+            load.add(vec![codec::Value {
+                bytes: Some(input.to_vec()),
+            }])
+            .unwrap();
+            assert_eq!(
+                load.rows[0].values[0].value,
+                Value::Text(std::str::from_utf8(input).unwrap().into())
+            );
+        }
+    }
+
+    #[test]
+    fn buffering_accounts_for_fixed_source_expansion_and_physical_unicode_bytes() {
+        for (family, width, id, wire_width, input, expected_size) in [
+            (Family::Char, 8000, 0xaf, 1u16, vec![0x80], 8002),
+            (Family::Nchar, 4000, 0xef, 2u16, vec![0x3e, 0xd8], 8000),
+        ] {
+            let declared =
+                Type::Character(CharacterType::new(family, Length::Bounded(width)).unwrap());
+            let mut load = Load::new(plan(declared));
+            let mut metadata = vec![0x81, 1, 0];
+            metadata.extend(0u32.to_le_bytes());
+            metadata.extend(1u16.to_le_bytes());
+            metadata.push(id);
+            metadata.extend(wire_width.to_le_bytes());
+            metadata.extend([9, 4, 0xd0, 0, 0x34]);
+            metadata.extend([1, b'v', 0]);
+            load.decoder.push(&metadata, false).unwrap();
+            let original_size = input.len();
+            load.add(vec![codec::Value { bytes: Some(input) }]).unwrap();
+            let actual_size = match &load.rows[0].values[0].value {
+                Value::Text(text) => text.len(),
+                Value::Unicode(units) => units.len() * 2,
+                other => panic!("unexpected fixed source {other:?}"),
+            };
+            assert_eq!(actual_size, expected_size);
+            assert!(actual_size > original_size * 1000);
+            assert_eq!(load.buffered, actual_size);
+            load.add(vec![codec::Value { bytes: None }]).unwrap();
+            assert_eq!(load.buffered, actual_size);
+        }
     }
 }

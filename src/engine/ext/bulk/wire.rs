@@ -7,6 +7,7 @@
 //! do (the crate does not export it).
 use anyhow::{Result, bail, ensure};
 use msduck_core::{
+    bulk_character_admission::{self as admission, Metadata, Wire, WireLength},
     character::Family as CharacterFamily,
     types::Type,
     value::{Decimal, TimeUnit, Value},
@@ -119,6 +120,35 @@ fn wire_family(info: &TypeInfo) -> Option<Family> {
     })
 }
 
+fn character_wire(info: &TypeInfo, nullable: bool) -> Option<Wire> {
+    let family = match info.id {
+        0xa7 => CharacterFamily::Varchar,
+        0xaf => CharacterFamily::Char,
+        0xe7 => CharacterFamily::Nvarchar,
+        0xef => CharacterFamily::Nchar,
+        _ => return None,
+    };
+    let expected_unicode = matches!(family, CharacterFamily::Nvarchar | CharacterFamily::Nchar);
+    let length = match info.format {
+        ValueFormat::ShortLen { max, unicode } if unicode == expected_unicode => {
+            WireLength::BoundedBytes(u16::try_from(max).ok()?)
+        }
+        ValueFormat::Plp { unicode } if unicode == expected_unicode => WireLength::Plp,
+        _ => return None,
+    };
+    Some(Wire {
+        family,
+        length,
+        nullable,
+    })
+}
+
+/// Limit new ROW/padding behavior to the same explicitly supported shapes as
+/// metadata admission. Legacy and unknown formats retain predecessor behavior.
+pub(super) fn measured_character(info: &TypeInfo) -> bool {
+    character_wire(info, false).is_some_and(Wire::is_supported_shape)
+}
+
 /// What SQL Server checks for one column of the COLMETADATA token: the
 /// 4816 state of a mismatch, or `None`. The captured rules
 /// (reference/gaps-bulk.json): the wire type must belong to the declared
@@ -130,23 +160,64 @@ pub(super) fn incompatible(
     declared: &Type,
     target_nullable: bool,
     target_max: bool,
-) -> Option<u8> {
+) -> Result<Option<u8>> {
+    if let Type::Character(character) = declared
+        && let Some(facts) = character_wire(&wire.type_info, wire.flags & 1 != 0)
+    {
+        match admission::metadata(*character, facts, target_nullable, target_max) {
+            Metadata::Admitted => return Ok(None),
+            Metadata::FamilyOrNullability => return Ok(Some(1)),
+            Metadata::MaxFraming => return Ok(Some(2)),
+            Metadata::Unknown => bail!("unsupported modern bulk character metadata"),
+        }
+    }
+    if matches!(wire.type_info.id, 0xa7 | 0xaf | 0xe7 | 0xef)
+        && character_wire(&wire.type_info, wire.flags & 1 != 0).is_none()
+    {
+        bail!("unsupported modern bulk character metadata");
+    }
     let family = wire_family(&wire.type_info);
     if family.is_none() || family != declared_family(declared) {
-        return Some(1);
+        return Ok(Some(1));
     }
     if (wire.flags & 1 != 0) != target_nullable {
-        return Some(1);
+        return Ok(Some(1));
     }
     let short = matches!(
         wire.type_info.format,
         ValueFormat::ShortLen { .. } | ValueFormat::ByteLen { exact: false, .. }
     );
-    (target_max && short).then_some(2)
+    Ok((target_max && short).then_some(2))
 }
 
 /// One ROW value as a parameter of the declared type. The family was
-/// checked against the declaration, so the value has its representation.
+/// checked against the declaration and source ROW length admitted before
+/// this conversion. Fixed-source padding precedes target storage conversion.
+pub(super) fn declared_value(
+    info: &TypeInfo,
+    declared: &Type,
+    bytes: Option<&[u8]>,
+) -> Result<Value> {
+    let mut value = value(info, bytes)?;
+    if measured_character(info)
+        && let Type::Character(character) = declared
+        && let Some(padding) = admission::padding_units(*character, bytes.map(<[u8]>::len))
+    {
+        match &mut value {
+            Value::Text(text) => {
+                text.try_reserve(padding)?;
+                text.extend(std::iter::repeat_n(' ', padding));
+            }
+            Value::Unicode(units) => {
+                units.try_reserve(padding)?;
+                units.extend(std::iter::repeat_n(32, padding));
+            }
+            _ => bail!("invalid admitted fixed character representation"),
+        }
+    }
+    Ok(value)
+}
+
 pub(super) fn value(info: &TypeInfo, bytes: Option<&[u8]>) -> Result<Value> {
     let Some(bytes) = bytes else {
         return Ok(Value::Null);
@@ -281,6 +352,117 @@ fn time(info: &TypeInfo, bytes: &[u8]) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_modern_metadata_never_falls_back_to_legacy_family_admission() {
+        let declared = Type::Character(
+            msduck_core::character::CharacterType::new(
+                CharacterFamily::Char,
+                msduck_core::character::Length::Bounded(8),
+            )
+            .unwrap(),
+        );
+        for format in [
+            ValueFormat::Plp { unicode: false },
+            ValueFormat::ShortLen {
+                max: 1,
+                unicode: true,
+            },
+        ] {
+            assert!(incompatible(&column(0xaf, format, 1), &declared, true, false).is_err());
+        }
+        let empty = column(
+            0xaf,
+            ValueFormat::ShortLen {
+                max: 0,
+                unicode: false,
+            },
+            1,
+        );
+        assert_eq!(incompatible(&empty, &declared, true, false).unwrap(), None);
+        assert_eq!(
+            declared_value(&empty.type_info, &declared, Some(b"")).unwrap(),
+            Value::Text("        ".into())
+        );
+    }
+
+    #[test]
+    fn unsupported_shapes_and_legacy_ids_do_not_enable_new_padding() {
+        let declared = Type::Character(
+            msduck_core::character::CharacterType::new(
+                CharacterFamily::Char,
+                msduck_core::character::Length::Bounded(8),
+            )
+            .unwrap(),
+        );
+        for (id, format) in [
+            (
+                0x2f,
+                ValueFormat::ByteLen {
+                    max: 1,
+                    exact: false,
+                },
+            ),
+            (
+                0x27,
+                ValueFormat::ByteLen {
+                    max: 1,
+                    exact: false,
+                },
+            ),
+            (0xaf, ValueFormat::Plp { unicode: false }),
+            (
+                0xaf,
+                ValueFormat::ShortLen {
+                    max: 1,
+                    unicode: true,
+                },
+            ),
+        ] {
+            let info = TypeInfo {
+                id,
+                format,
+                precision: None,
+                scale: None,
+                collation: None,
+            };
+            assert!(!measured_character(&info));
+            assert_eq!(
+                declared_value(&info, &declared, Some(b"A")).unwrap(),
+                Value::Text("A".into())
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_unicode_source_padding_preserves_isolated_units_and_null() {
+        let declared = Type::Character(
+            msduck_core::character::CharacterType::new(
+                CharacterFamily::Nchar,
+                msduck_core::character::Length::Bounded(4),
+            )
+            .unwrap(),
+        );
+        let info = TypeInfo {
+            id: 0xef,
+            format: ValueFormat::ShortLen {
+                max: 2,
+                unicode: true,
+            },
+            precision: None,
+            scale: None,
+            collation: None,
+        };
+        assert_eq!(declared_value(&info, &declared, None).unwrap(), Value::Null);
+        assert_eq!(
+            declared_value(&info, &declared, Some(&[0x3e, 0xd8])).unwrap(),
+            Value::Unicode(vec![0xd83e, 32, 32, 32])
+        );
+        assert_eq!(
+            declared_value(&info, &declared, Some(&[])).unwrap(),
+            Value::Text("    ".into())
+        );
+    }
     use msduck_core::character::{CharacterType, Length};
 
     fn column(id: u8, format: ValueFormat, flags: u16) -> WireColumn {
@@ -309,17 +491,29 @@ mod tests {
             1,
         );
         let int4 = column(0x38, ValueFormat::Fixed(4), 0);
-        assert_eq!(incompatible(&int_n, &Type::Int, true, false), None);
-        assert_eq!(incompatible(&int4, &Type::Int, false, false), None);
+        assert_eq!(incompatible(&int_n, &Type::Int, true, false).unwrap(), None);
+        assert_eq!(incompatible(&int4, &Type::Int, false, false).unwrap(), None);
         // Captured 4816: nullability differs from the target column.
-        assert_eq!(incompatible(&int_n, &Type::Int, false, false), Some(1));
-        assert_eq!(incompatible(&int4, &Type::Int, true, false), Some(1));
+        assert_eq!(
+            incompatible(&int_n, &Type::Int, false, false).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            incompatible(&int4, &Type::Int, true, false).unwrap(),
+            Some(1)
+        );
         // Captured 4816: the wire type is not the declared type.
-        assert_eq!(incompatible(&int4, &Type::BigInt, false, false), Some(1));
+        assert_eq!(
+            incompatible(&int4, &Type::BigInt, false, false).unwrap(),
+            Some(1)
+        );
         let varchar = Type::Character(
             CharacterType::new(CharacterFamily::Varchar, Length::Bounded(3)).unwrap(),
         );
-        assert_eq!(incompatible(&int4, &varchar, false, false), Some(1));
+        assert_eq!(
+            incompatible(&int4, &varchar, false, false).unwrap(),
+            Some(1)
+        );
         let nvarchar = column(
             0xe7,
             ValueFormat::ShortLen {
@@ -331,13 +525,19 @@ mod tests {
         let declared = Type::Character(
             CharacterType::new(CharacterFamily::Nvarchar, Length::Bounded(10)).unwrap(),
         );
-        assert_eq!(incompatible(&nvarchar, &declared, true, false), None);
+        assert_eq!(
+            incompatible(&nvarchar, &declared, true, false).unwrap(),
+            None
+        );
         // Captured 4816: a MAX target needs a MAX (PLP) wire type.
-        assert_eq!(incompatible(&nvarchar, &declared, true, true), Some(2));
+        assert_eq!(
+            incompatible(&nvarchar, &declared, true, true).unwrap(),
+            Some(2)
+        );
         let plp = column(0xe7, ValueFormat::Plp { unicode: true }, 1);
         let max =
             Type::Character(CharacterType::new(CharacterFamily::Nvarchar, Length::Max).unwrap());
-        assert_eq!(incompatible(&plp, &max, true, true), None);
+        assert_eq!(incompatible(&plp, &max, true, true).unwrap(), None);
     }
 
     #[test]
