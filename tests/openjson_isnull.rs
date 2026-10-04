@@ -1064,3 +1064,42 @@ fn openjson_binary_input_round_trip_resets_character_collation() {
         .unwrap();
     assert_eq!(rows, vec![vec![b'x', 0], vec![b'X', 0]]);
 }
+
+#[test]
+fn openjson_character_expressions_inherit_declared_input_collation() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE expression_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT expression_input VALUES(N'["x","X"]');"#,
+    );
+    // SQL Server 17.0.4065.4 retains only x for each original expression.
+    for (index, expression) in [
+        "t.doc+N''",
+        "N''+t.doc",
+        "COALESCE(t.doc,N'[]')",
+        "ISNULL(t.doc,N'[]')",
+        "CASE WHEN 1=1 THEN t.doc ELSE N'[]' END",
+        "IIF(1=1,t.doc,N'[]')",
+    ]
+    .iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                "CREATE TABLE expression_output_{index}(v NVARCHAR(MAX)); INSERT expression_output_{index} SELECT j.value FROM expression_input t CROSS APPLY OPENJSON({expression}) j WHERE j.value=N'x' ORDER BY j.[key]"
+            ),
+        );
+        let rows: Vec<Vec<u8>> = session
+            .db
+            .prepare(&format!(
+                "SELECT v.__msduck_utf16le FROM expression_output_{index}"
+            ))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(rows, vec![vec![b'x', 0]], "{expression}");
+    }
+}

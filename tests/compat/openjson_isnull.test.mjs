@@ -1202,3 +1202,171 @@ test('OPENJSON predicates and ordering follow declared source collations', async
     assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
   }
 })
+
+// Complete behavioral captures; wire-collation parity remains a documented gap.
+const expressionCollationCases = [
+  {
+    "name": "append literal",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(t.doc+N'') j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "prepend literal",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(N''+t.doc) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "coalesce",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(COALESCE(t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "isnull",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(ISNULL(t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "case",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CASE WHEN 1=1 THEN t.doc ELSE N'[]' END) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "iif",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(IIF(1=1,t.doc,N'[]')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  }
+]
+
+test('OPENJSON character expressions preserve captured collation comparisons', async t => {
+  const connection = await start(t)
+  await query(connection, `CREATE TABLE expression_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT expression_input VALUES(N'["x","X"]');`)
+  for (const entry of expressionCollationCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})

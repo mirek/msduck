@@ -229,39 +229,143 @@ fn openjson_columns(columns: &[OpenJsonTableColumn], input: &Expr) -> HashMap<St
 /// Character casts preserve the input collation; an explicit COLLATE wins.
 /// Column inheritance uses declaration facts in the completed source scope,
 /// never the JSON text or result values.
-fn source_collation(catalog: Option<&Catalog>, mut input: &Expr) -> Option<String> {
-    // Every iteration consumes an AST wrapper; casts through non-character
-    // domains reset collation instead of retaining an earlier text label.
-    loop {
-        match input {
-            Expr::Collate { collation, .. } => {
-                return Some(match collation.0.as_slice() {
-                    [ObjectNamePart::Identifier(name)] => name.value.clone(),
-                    _ => collation.to_string(),
-                });
+fn source_collation(catalog: Option<&Catalog>, input: &Expr) -> Option<String> {
+    source_label(catalog, input, 64)?
+        .name()
+        .filter(|name| {
+            !name.eq_ignore_ascii_case(msduck_sql::dialect::ext::keys::collation::DEFAULT)
+        })
+        .map(str::to_owned)
+}
+
+/// Combine declaration labels using the deterministic coercion rules. Bound
+/// recursion and never evaluate conditional branches or JSON input values.
+fn source_label(
+    catalog: Option<&Catalog>,
+    input: &Expr,
+    depth: usize,
+) -> Option<msduck_core::collation::Label> {
+    use msduck_core::collation::Label;
+    use msduck_sql::dialect::ext::keys::collation::DEFAULT;
+    if depth == 0 {
+        return None;
+    }
+    let label = |expr: &Expr| source_label(catalog, expr, depth - 1);
+    let combine = |operands: Vec<&Expr>| {
+        let mut result: Option<Label> = None;
+        for operand in operands {
+            if matches!(operand, Expr::Value(v) if v.value == Value::Null) {
+                continue;
             }
-            Expr::Nested(inner) => input = inner,
-            Expr::Cast {
-                expr, data_type, ..
-            }
-            | Expr::Convert {
-                expr,
-                data_type: Some(data_type),
-                ..
-            } if matches!(
-                msduck_sql::sql_type::declaration(data_type),
-                Ok(msduck_core::types::Type::Character(_))
-            ) =>
-            {
-                input = expr
-            }
-            Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
-                return catalog
-                    .and_then(|catalog| catalog.collation(input))
-                    .map(str::to_owned);
-            }
-            _ => return None,
+            let next = label(operand)?;
+            result = Some(match result {
+                Some(previous) => previous.combine(&next).ok()?,
+                None => next,
+            });
         }
+        result
+    };
+    match input {
+        Expr::Collate { collation, .. } => Some(Label::Explicit(match collation.0.as_slice() {
+            [ObjectNamePart::Identifier(name)] => name.value.clone(),
+            _ => collation.to_string(),
+        })),
+        Expr::Nested(inner) => label(inner),
+        Expr::Cast {
+            expr, data_type, ..
+        }
+        | Expr::Convert {
+            expr,
+            data_type: Some(data_type),
+            ..
+        } if matches!(
+            msduck_sql::sql_type::declaration(data_type),
+            Ok(msduck_core::types::Type::Character(_))
+        ) =>
+        {
+            // A non-character intermediate domain resets the label.
+            label(expr).or_else(|| {
+                let noncharacter = match expr.as_ref() {
+                    Expr::Cast { data_type, .. }
+                    | Expr::Convert {
+                        data_type: Some(data_type),
+                        ..
+                    } => msduck_sql::sql_type::declaration(data_type).is_ok_and(|kind| {
+                        !matches!(
+                            kind,
+                            msduck_core::types::Type::Character(_)
+                                | msduck_core::types::Type::Text
+                                | msduck_core::types::Type::Ntext
+                        )
+                    }),
+                    Expr::Value(v) => matches!(v.value, Value::Number(..) | Value::Boolean(_)),
+                    Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+                        catalog.is_some_and(|catalog| {
+                            matches!(catalog.resolve(expr), Resolution::Plain { text: false })
+                        })
+                    }
+                    _ => false,
+                };
+                noncharacter.then(|| Label::CoercibleDefault(DEFAULT.into()))
+            })
+        }
+        Expr::Identifier(ident) if scalar_variable(ident) => {
+            Some(Label::CoercibleDefault(DEFAULT.into()))
+        }
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+            let catalog = catalog?;
+            if !catalog.textual(input) {
+                return None;
+            }
+            let found = catalog.agreed_collation(input)?;
+            Some(Label::Implicit(found.unwrap_or(DEFAULT).into()))
+        }
+        Expr::Value(v)
+            if matches!(
+                v.value,
+                Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
+            ) =>
+        {
+            Some(Label::CoercibleDefault(DEFAULT.into()))
+        }
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Plus | BinaryOperator::StringConcat,
+            right,
+        } => combine(vec![left, right]),
+        Expr::Case {
+            conditions,
+            else_result,
+            ..
+        } => combine(
+            conditions
+                .iter()
+                .map(|condition| &condition.result)
+                .chain(else_result.as_deref())
+                .collect(),
+        ),
+        Expr::Function(f) => {
+            let FunctionArguments::List(list) = &f.args else {
+                return None;
+            };
+            let mut operands: Vec<&Expr> = list
+                .args
+                .iter()
+                .map(|arg| match arg {
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)) => Some(expr),
+                    _ => None,
+                })
+                .collect::<Option<_>>()?;
+            match f.name.to_string().to_ascii_uppercase().as_str() {
+                "COALESCE" | "ISNULL" => combine(operands),
+                "IIF" if operands.len() == 3 => {
+                    operands.remove(0);
+                    combine(operands)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }
 
@@ -885,6 +989,84 @@ mod tests {
         assert_eq!(
             catalog.collation(&qualified("j", "value")),
             Some("Latin1_General_100_CS_AS")
+        );
+    }
+
+    #[test]
+    fn character_expression_labels_preserve_precedence_and_unknowns() {
+        let expression = |text: &str| {
+            let Statement::Query(query) =
+                Parser::parse_sql(&MsSqlDialect {}, &format!("SELECT {text}"))
+                    .unwrap()
+                    .remove(0)
+            else {
+                panic!("query")
+            };
+            let SetExpr::Select(select) = *query.body else {
+                panic!("select")
+            };
+            let SelectItem::UnnamedExpr(expr) = select.projection.into_iter().next().unwrap()
+            else {
+                panic!("expression")
+            };
+            expr
+        };
+        for input in [
+            "(@doc COLLATE Latin1_General_100_CS_AS)+N''",
+            "N''+(@doc COLLATE Latin1_General_100_CS_AS)",
+            "COALESCE(@doc COLLATE Latin1_General_100_CS_AS,N'[]')",
+            "CASE WHEN 1=1 THEN @doc COLLATE Latin1_General_100_CS_AS ELSE N'[]' END",
+        ] {
+            assert_eq!(
+                source_collation(None, &expression(input)),
+                Some("Latin1_General_100_CS_AS".into())
+            );
+        }
+        assert_eq!(
+            source_collation(
+                None,
+                &expression("N''+(@doc COLLATE Latin1_General_100_CS_AS)")
+            ),
+            source_collation(
+                None,
+                &expression("(@doc COLLATE Latin1_General_100_CS_AS)+N''")
+            )
+        );
+        for input in [
+            "CAST(unknown_doc AS NVARCHAR(MAX))",
+            "CAST(unknown_function(@doc) AS NVARCHAR(MAX))",
+            "CAST((N'' COLLATE Latin1_General_100_CS_AS)+(N'' COLLATE Latin1_General_100_CI_AS) AS NVARCHAR(MAX))",
+        ] {
+            assert_eq!(source_label(None, &expression(input), 64), None, "{input}");
+        }
+        assert_eq!(
+            source_label(None, &expression("CAST(@doc AS NVARCHAR(MAX))"), 1),
+            None
+        );
+    }
+
+    #[test]
+    fn numeric_column_character_cast_has_coercible_default_priority() {
+        let mut catalog = catalog("SELECT * FROM OPENJSON(NULL) WITH(n INT,doc NVARCHAR(MAX)) j");
+        for columns in catalog.tables.values_mut() {
+            columns.get_mut("doc").unwrap().collation = Some("Latin1_General_100_CS_AS".into());
+        }
+        let Statement::Query(query) =
+            Parser::parse_sql(&MsSqlDialect {}, "SELECT CAST(j.n AS NVARCHAR(5))+j.doc")
+                .unwrap()
+                .remove(0)
+        else {
+            panic!("query")
+        };
+        let SetExpr::Select(select) = *query.body else {
+            panic!("select")
+        };
+        let SelectItem::UnnamedExpr(expr) = select.projection.into_iter().next().unwrap() else {
+            panic!("expression")
+        };
+        assert_eq!(
+            source_collation(Some(&catalog), &expr),
+            Some("Latin1_General_100_CS_AS".into())
         );
     }
 

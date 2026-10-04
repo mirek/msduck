@@ -213,3 +213,18 @@ The client replay retains full rows,
 descriptor names/types/lengths, errors and completion counts. Separate raw
 SQL_VARIANT_PROPERTY captures establish the input-derived labels; these checks
 do not establish complete wire collation metadata or nondefault set parity.
+
+OPENJSON input concatenation (`+`/`||`) and the character results of CASE,
+COALESCE, ISNULL and IIF retain declaration-based collation labels. Label
+precedence uses the deterministic core rules, with bounded traversal and no
+branch evaluation. Pinned SQL Server 17.0.4065.4 controls over a stored
+case-sensitive NVARCHAR(MAX) document retain only `x` from `["x","X"]` for
+append/prepend literals and each conditional form; the predecessor retained
+both rows. Native regressions preserve the original expressions and raw UTF-16
+output. Character casts retain known labels; proved noncharacter intermediate
+casts reset them. Unresolved expressions, unsupported functions, exhausted
+traversal and conflicting explicit labels do not manufacture a known label.
+This does not establish general expression or wire-collation parity. The
+additional explicit COLLATE operand in a `+` control still has a separately
+observed backend binding limitation; its complete raw error is retained with
+the reference evidence rather than counted as a matching result.
