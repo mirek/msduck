@@ -46,7 +46,8 @@ An optional `MSDUCK_BUILD_TMPDIR` may select a direct `tmp-NAME` child of the sa
 workspace, with NAME beginning with an ASCII letter or digit and containing only
 letters, digits, underscores or hyphens. Arbitrary absolute paths, nested paths,
 source/cache paths and shell text are rejected before SSH. Local `TMPDIR` is not
-forwarded; local test fixtures still need their own worktree `.tmp` setting.
+forwarded; local test fixtures still need their own private `/tmp` directory
+(see "Temporary files" in [agent-work.md](agent-work.md)).
 
 The existing `runner.lock` covers temporary-directory ownership and all subsequent
 synchronization and execution. Workspace ancestors, temporary directory and
