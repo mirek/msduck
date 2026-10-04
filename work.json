@@ -12121,6 +12121,24 @@
         "Implement under a fresh private exclusive claim and verified catalogcompanion receipt in the existing rootworktree; scope exactlytwofiles plus its separatelyownedcatalog/tests/docs. Noengine edits/newworkers/trees/caches. Exact frozenfmt/workspaceRust/strictalltargetClippy/alltargetbuild/npm/rawaudit/requiredCI and independent/Codexreview or authorizedfallback; combine with ownerPR964 if appropriate, then merge and complete bothprotectedtasks/projects/issues."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pm6j7"
+    },
+    {
+      "id": "isnull-carrier-adapters-v1",
+      "title": "Preserve ISNULL scalar-query carriers through root adapters",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatibility goal; first-party native lowered SQL on claimed PR964 reveals lossy VARCHAR conversion before ISNULL of an OPENJSON scalar query. Companion root task965 owns public carrier/evaluation regressions and width native adapter. No third-party intake. Same root worker/worktree/cache; no engine.rs edits.",
+      "issue": 967,
+      "scope": [
+        "src/concat_lower.rs",
+        "src/engine/ext/keys/predicates/lower.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Preserve typed Unicode carriers through ISNULL migrated operands and downstream representation checks, including scalar-query wrapper and bounded widths. Do not broadly force unrelated producers to carriers or erase explicit ANSI conversions; native type decisions must stay independent of values and retain correlation/cardinality/lazy/effect behavior.",
+        "Public isolated-unit scalar-query ISNULL, concatenation/comparison/storage and width controls under same rootworker task965 must pass with raw UTF16 payloads unchanged. Keep existing OPENJSON storage regressions and complete21caseSQLServer replay unchanged; do not weaken captured expectations/deadlines or conceal residual gaps.",
+        "Scope exactly root concat annotation and carrier predicate lower files; reuse existing rootworker/worktree/private new receipt/cache/runnerlock. Combine with PR964 and linked companion claims. Exacthead fmt/strictworkspacealltargetClippy/workspaceRust/alltargetbuild/npm/rawaudit/requiredCI and independent/verifiedCodexreview or ownerfallback; merge exacthead and promptly complete protected registry/issues/project."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pm9wn"
     }
   ]
 }
