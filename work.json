@@ -12004,6 +12004,26 @@
         "Same claiming worker combines with task958; exacthead fmt/workspaceRust/strictClippy/client/audit/CI/verifiedreview or authorizedfallback before merge and prompt registry completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
+    },
+    {
+      "id": "ansi-utf8-native-adapter-verification-v1",
+      "title": "Verify measured UTF8 codepage projections through native carriers and Arrow",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal and task958 runtime call-site audit: native Plan validates through complete project, so captured UTF8 codepage support also reaches that adapter. Existing tests assert unsupported and need measured native callback/Arrow coverage. Same root worker owns disjoint companion; no external input.",
+      "issue": 958,
+      "scope": [
+        "tests/ansi_carrier_projection.rs",
+        "docs/ansi-carrier-projection.md"
+      ],
+      "dependencies": [
+        "ansi-utf8-capacity-core-v1",
+        "bulk-character-collation-precedence-reference-v1"
+      ],
+      "acceptance": [
+        "Preserve unsupported opaque plan tests and admit measuredCP1251/CP1252 native targets. Replay all72/360 applicable unchanged collation observations through actual registered native callbacks, materialized storage and typedArrow. Preserve NULL/empty/exactnativebytes/encoding and existing resource/malformed tests; add codepage malformed/recovery and payload limit coverage if missing. No rawfixture changes, normalization or publicruntime support claims.",
+        "Same claimant combines with958 and expectation supplement. Frozenhead fullfmt/workspaceRust/strictClippy/client/rawaudit/requiredCI/verifiedreview or authorizedfallback; own merge/completion. Keep rootValue/catalog/publicBulkLoad adoption limitations explicit. Reuse cache and shared builderlock."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
     }
   ]
 }
