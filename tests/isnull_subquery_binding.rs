@@ -485,3 +485,38 @@ fn ansi_range_ordering_retains_select_scope_without_leaking_cte_sources() {
         .unwrap();
     assert_eq!(rows, vec!["y"]);
 }
+
+#[test]
+fn scalar_character_admission_leaves_unrelated_temporal_and_currency_predicates_typed() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        "CREATE TABLE mixed_predicate_source(v VARCHAR(2),a DATETIME2(3),b DATETIME2(7),m MONEY); INSERT mixed_predicate_source VALUES('x ',NULL,'0001-01-01T00:00:00.0000001',2)",
+    );
+    batch(
+        &mut session,
+        "WITH q(d,v) AS (SELECT COALESCE(a,b),v FROM mixed_predicate_source) SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=p.v THEN 1 ELSE 0 END AS hit INTO mixed_temporal_result FROM q CROSS JOIN mixed_predicate_source p WHERE d='0001-01-01T00:00:00.0000001'",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM mixed_temporal_result", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+    batch(
+        &mut session,
+        "WITH a AS (SELECT SUM(m) total FROM mixed_predicate_source) SELECT IIF(total='$2',1,0) AS money_hit,CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=p.v THEN 1 ELSE 0 END AS text_hit INTO mixed_currency_result FROM a CROSS JOIN mixed_predicate_source p",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<(i32, i32), _, _>(
+                "SELECT money_hit,text_hit FROM mixed_currency_result",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?))
+            )
+            .unwrap(),
+        (1, 1)
+    );
+}

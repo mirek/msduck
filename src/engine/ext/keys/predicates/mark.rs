@@ -390,6 +390,104 @@ fn ansi_keyed(expr: &Expr) -> bool {
             if matches!(list.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] if name(inner, "RTRIM"))))
 }
 
+fn scalar_character(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => scalar_character(inner),
+        Expr::Function(f) => {
+            matches!(
+                f.name.to_string().as_str(),
+                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+            ) || f.name.to_string().eq_ignore_ascii_case("ISNULL")
+                && first_argument(f).is_some_and(|a| matches!(a, Expr::Subquery(_)))
+        }
+        _ => false,
+    }
+}
+
+fn scalar_character_predicate(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    let proved = |operands: &[&Expr]| {
+        operands.iter().any(|operand| scalar_character(operand))
+            && operands.iter().all(|operand| {
+                text(catalog, parameters, operand)
+                    || matches!(operand, Expr::Value(v) if v.value == Value::Null)
+            })
+    };
+    match expr {
+        Expr::BinaryOp { left, op, right } if operation(op).is_some() => proved(&[left, right]),
+        Expr::Between {
+            expr, low, high, ..
+        } => proved(&[expr, low, high]),
+        Expr::InList { expr, list, .. } => {
+            let operands: Vec<_> = std::iter::once(expr.as_ref()).chain(list.iter()).collect();
+            proved(&operands)
+        }
+        Expr::Like { expr, pattern, .. } => proved(&[expr, pattern]),
+        Expr::Case {
+            operand: Some(operand),
+            conditions,
+            ..
+        } => {
+            let operands: Vec<_> = std::iter::once(operand.as_ref())
+                .chain(conditions.iter().map(|condition| &condition.condition))
+                .collect();
+            proved(&operands)
+        }
+        _ => false,
+    }
+}
+
+/// Scalar character declarations can require scoped column proof even when
+/// the catalog contains only ANSI columns. Conditional sites alone cannot.
+pub(super) fn scalar_character_predicates<T: Visit>(
+    catalog: &Catalog,
+    parameters: &Parameters,
+    node: &T,
+) -> bool {
+    struct Find<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
+    impl Find<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.2.last().unwrap_or(self.0)
+        }
+    }
+    impl Visitor for Find<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
+            self.2.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+            self.2.push(self.catalog().select_scope(select));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &Select) -> ControlFlow<()> {
+            // Retain a simple SELECT's declarations for query ORDER BY.
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            let proved = scalar_character_predicate(self.catalog(), self.1, expr);
+            if proved {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    node.visit(&mut Find(catalog, parameters, Vec::new(), Vec::new()))
+        .is_break()
+}
+
 /// Mark the operands of one operation when any of them is Unicode text;
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
@@ -427,19 +525,6 @@ fn mark(
     // Scalar ISNULL widths have a declared character result but are not
     // catalog columns. Use that declaration only with proved character peers;
     // numeric and unresolved operands retain their coercion path.
-    fn scalar_character(expr: &Expr) -> bool {
-        match expr {
-            Expr::Nested(inner) => scalar_character(inner),
-            Expr::Function(f) => {
-                matches!(
-                    f.name.to_string().as_str(),
-                    "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
-                ) || f.name.to_string().eq_ignore_ascii_case("ISNULL")
-                    && first_argument(f).is_some_and(|a| matches!(a, Expr::Subquery(_)))
-            }
-            _ => false,
-        }
-    }
     let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)))
         || operands.iter().any(|o| scalar_character(o))
             && operands.iter().all(|o| {
@@ -643,8 +728,9 @@ pub(super) fn rewrite<T: VisitMut>(
     catalog: &Catalog,
     parameters: &Parameters,
     node: &mut T,
+    scalar_only: bool,
 ) -> Result<(), SqlError> {
-    struct Mark<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
+    struct Mark<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>, bool);
     impl Mark<'_> {
         fn catalog(&self) -> &Catalog {
             self.2.last().unwrap_or(self.0)
@@ -679,6 +765,11 @@ pub(super) fn rewrite<T: VisitMut>(
         }
 
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
+            // A scalar-character-only admission must not introduce MAYBE
+            // markers into unrelated temporal/currency predicates.
+            if self.4 && !scalar_character_predicate(self.catalog(), self.1, expr) {
+                return ControlFlow::Continue(());
+            }
             let result = match expr {
                 Expr::BinaryOp { left, op, right } => match operation(op) {
                     Some(operation) => mark(self.catalog(), self.1, operation, vec![left, right]),
@@ -897,7 +988,10 @@ pub(super) fn rewrite<T: VisitMut>(
             }
         }
     }
-    match VisitMut::visit(node, &mut Mark(catalog, parameters, Vec::new(), Vec::new())) {
+    match VisitMut::visit(
+        node,
+        &mut Mark(catalog, parameters, Vec::new(), Vec::new(), scalar_only),
+    ) {
         ControlFlow::Break(error) => Err(error),
         ControlFlow::Continue(()) => Ok(()),
     }
