@@ -309,11 +309,7 @@ fn every_retained_malformed_input_stays_outside_the_scalar_domain() {
 
 #[test]
 fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
-    for target in [
-        ProjectionTarget::Native(EncodingIdentity::Cp1251),
-        ProjectionTarget::Native(EncodingIdentity::Cp1252),
-        ProjectionTarget::Native(EncodingIdentity::Opaque(65001)),
-    ] {
+    for target in [ProjectionTarget::Native(EncodingIdentity::Opaque(65001))] {
         let ProjectionTarget::Native(encoding) = target else {
             unreachable!()
         };
@@ -329,6 +325,8 @@ fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
         }
     }
     for target in [
+        ProjectionTarget::Native(EncodingIdentity::Cp1251),
+        ProjectionTarget::Native(EncodingIdentity::Cp1252),
         ProjectionTarget::Native(EncodingIdentity::Utf8),
         ProjectionTarget::SqlUtf16,
     ] {
