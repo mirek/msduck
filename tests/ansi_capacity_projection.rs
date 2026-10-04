@@ -906,7 +906,7 @@ fn utf8_capacity_callback_replays_all_original_native_and_error_oracles() {
     assert_eq!(observations, 512);
     assert_eq!(failures, 264);
     for target in [Encoding::Cp1251, Encoding::Cp1252] {
-        // Complete strict projection still has its own unsupported target domain.
+        // Complete strict projection admits captured targets independently of SQL capacity.
         assert!(
             Plan::new(
                 Encoding::Utf8,
@@ -918,7 +918,7 @@ fn utf8_capacity_callback_replays_all_original_native_and_error_oracles() {
                 CHUNK,
                 CHUNK
             )
-            .is_err()
+            .is_ok()
         );
     }
 }

@@ -2,7 +2,7 @@
 
 `msduck::ansi_carrier::projection::Plan` registers a caller-owned, connection-local DuckDB function over the existing tagged ANSI carrier. The explicit source identity, target identity, per-cell input/output byte limits and per-chunk input/output limits are declaration facts. The bridge calls the completed deterministic projection kernel and returns a native target carrier or the existing UTF16 carrier. It introduces no lossy text intermediate.
 
-`Plan::new` admits CP1251/CP1252 complete projections and valid UTF8 identity/UTF16 projections. It remains strict: malformed UTF8 fails even when SQL Server admits those bytes in another context. Raw native storage still preserves malformed input independently. Unsupported plans fail before NULL handling; physical STRUCT shape never supplies logical ANSI identity by itself.
+`Plan::new` admits CP1251/CP1252 complete projections and valid UTF8 native CP1251/CP1252/UTF8 and SQL UTF16 projections. It remains strict: malformed UTF8 fails even when SQL Server admits those bytes in another context. Raw native storage still preserves malformed input independently. Unsupported plans fail before NULL handling; physical STRUCT shape never supplies logical ANSI identity by itself.
 
 `Plan::stored_utf8_to_sql_utf16` explicitly selects the completed deterministic stored-value decoder for a UTF8 native carrier and a UTF16 target. Its source and target identities are declaration facts, including for NULL and empty values. It reproduces SQL-specific EOF fitting, selector pairing and malformed repair: `8042` projects to `FDFF4200`, `EDA080` to `FDFFFDFF`, and `41E1A0` to an empty non-NULL UTF16 payload. Standalone `80` preserves its native bytes but fails Unicode projection with the distinct stored-boundary error. This plan does not change the strict constructor or admit a BulkLoad row.
 
@@ -77,10 +77,23 @@ for public runtime behavior; this internal adapter does not enable a collation.
 Task #944 pairs with the deterministic UTF8 capacity extension #942. The bulk
 constructor validates its own capacity domain before shared storage/resource
 validation, allowing UTF8-to-codepage capacity without relaxing strict complete
-projection. `Plan::new` still rejects UTF8-to-CP1251/CP1252 even for NULL. Whole
+projection. Complete valid UTF8-to-CP1251/CP1252 projections are now admitted
+using the measured maps described below. Whole
 chunk shape/tag/child/input checks and fallible output preparation are unchanged.
 The new callback suite replays all512 original task940 native/error outcomes
 (264 failed loads), preserving exact target bytes and SQL UTF16 units. All eight native capacity tests passed at checkpoint
 `1a267cf63ccae0888a4299ffde9188e99a22968b`; full frozen-revision verification
 and review remain pending; source registration remains an internal
 caller-owned operation with no endpoint collation gate enabled.
+
+## Complete UTF8 codepage adapter verification
+
+The native constructor now admits the measured strict UTF8 codepage projections
+from [ansi-conversion.md](ansi-conversion.md). All 72 applicable observations
+and 360 original native-byte rows from the immutable collation-precedence
+reference pass through the registered callbacks. Sixteen repetitions of each
+target's 180 original rows verify materialized output across Arrow chunks while
+retaining native identity, NULL and empty. Malformed/truncated UTF8 and output
+limit failures leave subsequent successful calls usable. Opaque codepages remain
+unsupported. No public catalog, Value or BulkLoad integration is enabled by
+these internal callbacks.
