@@ -12064,7 +12064,7 @@
     {
       "id": "remote-owned-tmpdir-v1",
       "title": "Keep remote build temporary files in the owned workspace",
-      "state": "ready",
+      "state": "done",
       "authorization": "The owner authorized continuing first-party server work, reliable use of linux.local, faster contribution cycles, and disk-conscious parallel work. On 2026-10-04, exact-head PR #961 verification failed at native linking because Linux /tmp had 1,048,576/1,048,576 inodes used while still having 54GiB free. The same frozen source passes linking and the new native regressions with a task-owned TMPDIR under the existing canonical runner.lock. The regular remote runner does not configure TMPDIR. This bounded companion fixes the demonstrated infrastructure failure without modifying the current IDENTITY claim or live engine reservation. Reuse an existing completed worker/worktree; add no agents, worktrees or native cache copies.",
       "scope": [
         "scripts/remote-build.mjs",
