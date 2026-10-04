@@ -205,9 +205,11 @@ FROM/APPLY order, so a chained OPENJSON source sees its predecessor's completed
 collation rather than depending on hash-map iteration. It uses declaration
 facts only; unknown expressions and ambiguous references remain unresolved.
 
-Six additional pinned SQL Server 17.0.4065.4 captures cover key case-sensitive
+Seven additional pinned SQL Server 17.0.4065.4 behavioral captures cover key case-sensitive
 equality and binary ordering, explicit value/WITH comparisons, stored input
-collation and a two-stage lateral chain. The client replay retains full rows,
+collation, a two-stage lateral chain and a VARBINARY round trip. Character casts
+preserve the input label; passing through a non-character domain resets it.
+The client replay retains full rows,
 descriptor names/types/lengths, errors and completion counts. Separate raw
 SQL_VARIANT_PROPERTY captures establish the input-derived labels; these checks
 do not establish complete wire collation metadata or nondefault set parity.

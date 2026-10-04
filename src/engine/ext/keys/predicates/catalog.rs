@@ -229,19 +229,39 @@ fn openjson_columns(columns: &[OpenJsonTableColumn], input: &Expr) -> HashMap<St
 /// Character casts preserve the input collation; an explicit COLLATE wins.
 /// Column inheritance uses declaration facts in the completed source scope,
 /// never the JSON text or result values.
-fn source_collation(catalog: Option<&Catalog>, input: &Expr) -> Option<String> {
-    match input {
-        Expr::Collate { collation, .. } => Some(match collation.0.as_slice() {
-            [ObjectNamePart::Identifier(name)] => name.value.clone(),
-            _ => collation.to_string(),
-        }),
-        Expr::Nested(inner)
-        | Expr::Cast { expr: inner, .. }
-        | Expr::Convert { expr: inner, .. } => source_collation(catalog, inner),
-        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog
-            .and_then(|catalog| catalog.collation(input))
-            .map(str::to_owned),
-        _ => None,
+fn source_collation(catalog: Option<&Catalog>, mut input: &Expr) -> Option<String> {
+    // Every iteration consumes an AST wrapper; casts through non-character
+    // domains reset collation instead of retaining an earlier text label.
+    loop {
+        match input {
+            Expr::Collate { collation, .. } => {
+                return Some(match collation.0.as_slice() {
+                    [ObjectNamePart::Identifier(name)] => name.value.clone(),
+                    _ => collation.to_string(),
+                });
+            }
+            Expr::Nested(inner) => input = inner,
+            Expr::Cast {
+                expr, data_type, ..
+            }
+            | Expr::Convert {
+                expr,
+                data_type: Some(data_type),
+                ..
+            } if matches!(
+                msduck_sql::sql_type::declaration(data_type),
+                Ok(msduck_core::types::Type::Character(_))
+            ) =>
+            {
+                input = expr
+            }
+            Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+                return catalog
+                    .and_then(|catalog| catalog.collation(input))
+                    .map(str::to_owned);
+            }
+            _ => return None,
+        }
     }
 }
 
@@ -846,6 +866,24 @@ mod tests {
         );
         assert_eq!(
             catalog.collation(&qualified("j", "v")),
+            Some("Latin1_General_100_CS_AS")
+        );
+    }
+
+    #[test]
+    fn non_character_casts_reset_input_collation() {
+        for input in [
+            "CAST(CAST(@doc COLLATE Latin1_General_100_CS_AS AS VARBINARY(MAX)) AS NVARCHAR(MAX))",
+            "CONVERT(NVARCHAR(MAX), CONVERT(VARBINARY(MAX), @doc COLLATE Latin1_General_100_CS_AS))",
+        ] {
+            let catalog = catalog(&format!("SELECT j.value FROM OPENJSON({input}) j"));
+            assert_eq!(catalog.collation(&qualified("j", "value")), None);
+        }
+        let catalog = catalog(
+            "SELECT j.value FROM OPENJSON(CAST(@doc COLLATE Latin1_General_100_CS_AS AS NVARCHAR(MAX))) j",
+        );
+        assert_eq!(
+            catalog.collation(&qualified("j", "value")),
             Some("Latin1_General_100_CS_AS")
         );
     }

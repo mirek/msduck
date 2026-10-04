@@ -1164,6 +1164,35 @@ const sourceCollationCases = [
         1
       ]
     }
+  },
+  {
+    "name": "binary round trip comparison",
+    "query": "SELECT j.value FROM OPENJSON(CAST(CAST(N'[\"x\",\"X\"]' COLLATE Latin1_General_100_CS_AS AS VARBINARY(MAX)) AS NVARCHAR(MAX))) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ],
+            [
+              "X"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
   }
 ]
 

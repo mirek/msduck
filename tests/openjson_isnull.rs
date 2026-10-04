@@ -1046,3 +1046,21 @@ fn chained_openjson_values_inherit_physical_input_collation() {
         .unwrap();
     assert_eq!(rows, vec![vec![b'x', 0]]);
 }
+
+#[test]
+fn openjson_binary_input_round_trip_resets_character_collation() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE binary_input_output(v NVARCHAR(MAX)); INSERT binary_input_output SELECT j.value FROM OPENJSON(CAST(CAST(N'["x","X"]' COLLATE Latin1_General_100_CS_AS AS VARBINARY(MAX)) AS NVARCHAR(MAX))) j WHERE j.value=N'x' ORDER BY j.[key];"#,
+    );
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM binary_input_output")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![vec![b'x', 0], vec![b'X', 0]]);
+}
