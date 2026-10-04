@@ -988,6 +988,12 @@ impl Session {
             return Ok(CrossDatabase::Local);
         };
         let display = |alias: &str| self.database.catalog().display_name(alias);
+        // Access to each database is checked first, as USE checks it (924
+        // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
+        // object of another database is an invalid object name.
+        // The guards are kept until the statement ends (see `CrossDatabase`),
+        // so the databases cannot be dropped in between.
+        let held = self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?;
         // Views of another database that read its catalog views count as
         // reading them.
         let mut catalog_views = relations.catalog_views;
@@ -1013,12 +1019,6 @@ impl Session {
                 }
             }
         }
-        // Access to each database is checked first, as USE checks it (924
-        // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
-        // object of another database is an invalid object name.
-        // The guards are kept until the statement ends (see `CrossDatabase`),
-        // so the databases cannot be dropped in between.
-        let held = self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?;
         for name in &relations.foreign_names {
             if let Some((alias, local)) =
                 crate::query_catalog::foreign_relation(&self.db, &relations.current, name)?
@@ -1145,7 +1145,21 @@ impl Session {
             refuse_output_into(&display(&alias.value))?;
             refuse_routines(&display(&alias.value))?;
             refuse_catalog_views()?;
-            if relations.local_catalog_views {
+            let local_dependent =
+                crate::query_catalog::catalog_dependent_views(&self.db, &relations.current)?;
+            let reads_local_views = relations.local_names.iter().any(|name| {
+                let parts = name
+                    .0
+                    .iter()
+                    .map(|part| part.to_string().trim_matches('"').to_lowercase())
+                    .collect::<Vec<_>>();
+                match parts.as_slice() {
+                    [object] => local_dependent.contains(&("dbo".to_string(), object.clone())),
+                    [schema, object] => local_dependent.contains(&(schema.clone(), object.clone())),
+                    _ => false,
+                }
+            });
+            if relations.local_catalog_views || reads_local_views {
                 bail!(
                     "unsupported cross-database statement: it writes database '{}' and reads catalog views of the session's database",
                     display(&alias.value)
@@ -8125,6 +8139,8 @@ struct Relations {
     catalog_views: bool,
     /// Whether the session database's catalog views are read.
     local_catalog_views: bool,
+    /// The names of `local`, other than temporary objects.
+    local_names: Vec<ObjectName>,
     /// Relation nodes of the current database.
     local: Vec<*const ObjectName>,
     /// Whether a SELECT INTO creates a table in the current database.
@@ -8210,7 +8226,8 @@ impl Relations {
                 {
                     self.local_catalog_views = true;
                 }
-                self.local.push(node)
+                self.local.push(node);
+                self.local_names.push(name.clone());
             }
         }
     }

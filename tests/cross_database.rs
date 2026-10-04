@@ -788,3 +788,25 @@ fn views_over_catalog_views_read_their_own_database() {
     }
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn dml_writing_another_database_does_not_read_local_views_over_catalog_views() {
+    let (_server, mut session) = fixture();
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.local_cols AS SELECT name FROM sys.columns",
+    );
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.cols (name NVARCHAR(128)); USE master",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "INSERT foo.dbo.cols SELECT name FROM dbo.local_cols"
+        )
+        .0,
+        40515
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 0);
+}
