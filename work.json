@@ -11896,6 +11896,30 @@
       ],
       "issue": 950,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmicE"
+    },
+    {
+      "id": "bulk-character-source-row-limits-runtime-v1",
+      "title": "Admit BulkLoad character ROWs by declared source limits rather than wire width",
+      "state": "backlog",
+      "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party final task950 independently reviewed original and reproduced oracle: all eight fresh databases agree that modern bounded ROW payloads may exceed advertised0/1 wire width if they fit the declared source width. Existing codec prematurely rejects those successful requests. Work begins only after950 merges/Done and this task is ready; no third-party inputs.",
+      "scope": [
+        "crates/msduck-tds/src/bulk_load.rs",
+        "crates/msduck-tds/tests/bulk_load.rs",
+        "src/engine/ext/bulk/load.rs",
+        "tests/bulk_character_wire_capacity.rs",
+        "docs/bulk-character-wire-capacity.md"
+      ],
+      "dependencies": [
+        "bulk-character-wire-capacity-reference-v1"
+      ],
+      "acceptance": [
+        "Inspect unchanged original950 fixture and frozen-source independent reproduction; replay all256 original observations without rewriting inputs, wire widths, declared collations, fixed-source padding, expected diagnostics, completion, native bytes or original-session counters. Demonstrate predecessor real Session failures before correction. The measured successful domain includes each modern ANSI/Unicode fixed/variable family and original NULL/empty/one/two-unit controls. Keep unsupported collation/legacy/MAX/nonASCII frontiers explicit rather than claim complete BulkLoad compatibility.",
+        "Separate advertised TYPE_INFO width from actual ROW byte length and declared source capacity. Supply explicit caller-owned per-column source byte limits to the deterministic codec where needed, with no parser/session/catalog/backend or SQL-diagnostic dependencies in TDS. Source facts come from the validated INSERT BULK plan, independently of current values. Ignore advertised character width as a runtime ROW capacity in the measured modern shapes; preserve noncharacter and unmeasured legacy/framing/odd-Unicode/resource policies. Retain bounded lengths and preflight declared-source overflow before payload copying/allocation, including fragmented prefixes and incomplete payloads. Typed decoder limit facts must remain distinct from SQL errors. Metadata family/nullability/MAX admission must still take precedence over source overflow.",
+        "Meaningful codec and real Session regressions cover values beyond advertised0/1 wire width but inside source capacity, exact declared boundary and one above, correct Unicode byte/unit scaling, NULL/empty/fixed padding, fragmentation/poisoning, metadata precedence, unrelated binary/numeric/legacy malformed inputs, late staged failure with caller transaction/whole-load atomicity and subsequent recovery. Reuse all existing bulk-admission/capacity controls unchanged. Allocation accounting must remain checked and staging bounded; no whole payload copies, lossy displays, duplicate evaluation, guessed diagnostics or source-limit bypass for a small advertised width.",
+        "Fresh own claim and receipt in the existing isolated root worktree after dependencyDone/ready publication; only the five exact paths, no engine.rs, root/TDS exports, native encoding/catalog operational gate or other reserved file edits. Reuse locked canonical Linux workspace and shared local deterministic cache after prior jobs terminal; no new agents/worktrees/native caches. Frozen head formatting/workspaceRust/strict workspace all-target Clippy/full independent npm/audit, retain raw audit differences and prove source/executable hashes through tests. Exact-head independent and verified Codex review or authorized availability fallback, required CI, worker-owned merge, prompt registry/issue/project Done completion."
+      ],
+      "issue": 952,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmjdc"
     }
   ]
 }
