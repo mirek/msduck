@@ -11806,7 +11806,7 @@
     {
       "id": "bulk-character-metadata-reference-v1",
       "title": "Measure BulkLoad character declaration versus wire metadata admission",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner full SQL Server compatibility goal; source/fixture evidence described in publication. This is actual SQL Server ground truth for the next root admission integration, not an operational collation gate.",
       "scope": [
         "scripts/capture-bulk-character-metadata.mjs",
