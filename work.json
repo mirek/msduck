@@ -11687,7 +11687,7 @@
     {
       "id": "ansi-stored-utf8-native-adapter-v1",
       "title": "Project stored UTF8 carriers through the native DuckDB adapter",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and first-party raw SQL Server stored projection fixture/core933; existing strict root adapter cannot implement accepted malformed bytes or SQL EOF boundaries. This bounded root effect adapter is prerequisite to coordinated engine/Value/catalog/BulkLoad/wire integration, not a replacement for that integration.",
       "issue": 936,
       "scope": [
