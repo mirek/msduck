@@ -859,7 +859,11 @@ fn utf8_capacity_callback_replays_all_original_native_and_error_oracles() {
         let name = format!("__msduck_ansi_project_utf8_capacity_{observations}");
         plan(d).register(&db, &name).unwrap();
         let bytes = hex(c["values"][1].as_str().unwrap());
-        let mut statement=db.prepare(&format!("WITH input(ord,value) AS (VALUES (0,?), (1,?)) SELECT {name}(value) FROM input ORDER BY ord")).unwrap();
+        let pack = storage(Encoding::Utf8).pack_function();
+        let sql = format!(
+            "WITH input(ord,value) AS (VALUES (0,?), (1,?)) SELECT {name}({pack}(value)) FROM input ORDER BY ord"
+        );
+        let mut statement = db.prepare(&sql).unwrap();
         let result = statement
             .query_map(
                 [
