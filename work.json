@@ -11986,6 +11986,24 @@
       ],
       "issue": 958,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
+    },
+    {
+      "id": "ansi-utf8-native-expectations-v1",
+      "title": "Retain UTF8 projection error tests while admitting captured codepage targets",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and task958 exact-source test failure: ansi_utf8_projection still asserts UTF8 to CP1251/CP1252 unsupported. New measured projections passed all507904 retained BMP cells and360 original collation rows. Same worker requires this disjoint expectation scope in combined task958 PR; no external content.",
+      "issue": 958,
+      "scope": [
+        "crates/msduck-core/tests/ansi_utf8_projection.rs"
+      ],
+      "dependencies": [
+        "ansi-utf8-capacity-core-v1"
+      ],
+      "acceptance": [
+        "Remove namedCP1251/CP1252 from unsupported target list and include them in existing supported target precedence tests. Keep opaque target rejection, declaration mismatch, input limit, malformed offset checks and every immutable raw fixture comparison. No normalization or weakening diagnostic/resource assertions.",
+        "Same claiming worker combines with task958; exacthead fmt/workspaceRust/strictClippy/client/audit/CI/verifiedreview or authorizedfallback before merge and prompt registry completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
     }
   ]
 }
