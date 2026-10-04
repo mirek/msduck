@@ -301,7 +301,6 @@ fn final_fixed_utf16_bounds_count_bytes_and_keep_null_separate() {
 #[test]
 fn validation_rejects_unproven_profiles_and_invalid_declarations() {
     for source in [
-        EncodingIdentity::Utf8,
         EncodingIdentity::Opaque(1251),
         EncodingIdentity::Opaque(1252),
         EncodingIdentity::Opaque(65001),

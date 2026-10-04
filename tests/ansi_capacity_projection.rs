@@ -375,10 +375,6 @@ fn declarations_and_resource_limits_remain_independent_of_null_and_fitting() {
     };
     for d in [
         CapacityDeclaration {
-            source: Encoding::Utf8,
-            ..base
-        },
-        CapacityDeclaration {
             source: Encoding::Opaque(1251),
             ..base
         },
@@ -818,4 +814,107 @@ fn capacity_evaluates_original_once_and_preserves_nulls_across_chunks() {
     }
     assert_eq!(seen, 10000);
     assert_eq!(count.load(Ordering::SeqCst), 10000);
+}
+
+#[test]
+fn utf8_capacity_callback_replays_all_original_native_and_error_oracles() {
+    let text = String::from_utf8(pinned(
+        "reference/bulk-character-utf8-capacity.json",
+        "f31fa57d130c9744a9246b625475bbb75830051ea651d7b250824a4bff7a0fc5",
+    ))
+    .unwrap();
+    let db = Connection::open_in_memory().unwrap();
+    setup(&db);
+    let mut position = 0;
+    let mut observations = 0;
+    let mut failures = 0;
+    while let Some(offset) = text[position..].find("{\"case\":") {
+        let start = position + offset;
+        let end = object_end(&text, start);
+        let raw = &text[start..end];
+        let cs = "{\"case\":".len();
+        let ce = object_end(raw, cs);
+        let c: Json = serde_json::from_str(&raw[cs..ce]).unwrap();
+        let rstart = raw.find("\"readback\":").unwrap() + "\"readback\":".len();
+        let readback: Json = serde_json::from_str(&raw[rstart..object_end(raw, rstart)]).unwrap();
+        assert_eq!(readback["session"], "original");
+        let execution = raw.find("\"execution\":").unwrap();
+        let failed = raw[execution..].contains("\"errors\":[{\"number\":");
+        let target = target(c["target"].as_str().unwrap());
+        let d = CapacityDeclaration {
+            source: Encoding::Utf8,
+            source_form: if c["sourceWidth"] == "max" {
+                SourceForm::Max
+            } else {
+                SourceForm::Bounded
+            },
+            target,
+            family: if matches!(c["targetFamily"].as_str(), Some("char" | "nchar")) {
+                Family::Fixed
+            } else {
+                Family::Variable
+            },
+            capacity: Capacity::Bounded(c["targetWidth"].as_u64().unwrap() as usize),
+        };
+        let name = format!("__msduck_ansi_project_utf8_capacity_{observations}");
+        plan(d).register(&db, &name).unwrap();
+        let bytes = hex(c["values"][1].as_str().unwrap());
+        let mut statement=db.prepare(&format!("WITH input(ord,value) AS (VALUES (0,?), (1,?)) SELECT {name}(value) FROM input ORDER BY ord")).unwrap();
+        let result = statement
+            .query_map(
+                [
+                    bind(Encoding::Utf8, None),
+                    bind(Encoding::Utf8, Some(&bytes)),
+                ],
+                |row| row.get::<_, Value>(0),
+            )
+            .and_then(|rows| rows.collect::<duckdb::Result<Vec<_>>>());
+        if failed {
+            assert!(
+                readback["result"]["sets"][1]["rows"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(
+                result.is_err(),
+                "{} unexpected native callback success",
+                c["name"]
+            );
+            failures += 1;
+        } else {
+            let expected: Vec<_> = readback["result"]["sets"][1]["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| binary(&row[2]))
+                .collect();
+            let got: Vec<_> = result
+                .unwrap_or_else(|error| panic!("{}: {error}", c["name"]))
+                .iter()
+                .map(|value| actual(value, target))
+                .collect();
+            assert_eq!(got, expected, "{}", c["name"]);
+        }
+        observations += 1;
+        position = end;
+    }
+    assert_eq!(observations, 512);
+    assert_eq!(failures, 264);
+    for target in [Encoding::Cp1251, Encoding::Cp1252] {
+        // Complete strict projection still has its own unsupported target domain.
+        assert!(
+            Plan::new(
+                Encoding::Utf8,
+                Target::Native(target),
+                ProjectionLimits {
+                    input_bytes: CELL,
+                    output_bytes: CELL
+                },
+                CHUNK,
+                CHUNK
+            )
+            .is_err()
+        );
+    }
 }

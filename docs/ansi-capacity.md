@@ -1,13 +1,13 @@
 # Native ANSI BulkLoad capacity
 
 `msduck_core::ansi_conversion::capacity::Plan` separates SQL capacity from the
-complete projections in its parent module. A plan validates CP1251/CP1252 source
+complete projections in its parent module. A plan validates CP1251/CP1252/UTF8 source
 identity and bounded/MAX source form, native CP1251/CP1252/UTF8 or SQL UTF16 target, variable/fixed family and
 bounded/MAX capacity before a nullable row is supplied. Source form comes from the admitted declaration,
 not the row length or value. Native capacities count
 bytes; Unicode capacities count two-byte units. Bounded declarations accept
 1..=8000 native bytes or 1..=4000 Unicode units; fixed MAX is invalid.
-Opaque tags and UTF8 source plans are unsupported. The parent's complete
+Opaque tags are unsupported. The parent's complete
 projection remains separate from capacity admission.
 
 The root must first admit the actual source declaration, wire shape and target
@@ -134,3 +134,55 @@ Each matrix's original counters agree within its four runs, while the complete
 sidecars retain respectively1942,2187 and3161 raw differences elsewhere.
 These finite collations and BulkLoad declarations do not establish arbitrary
 collation, CAST/assignment, source-wire admission or runtime adoption.
+
+
+## UTF8 BulkLoad source extension
+
+Task #942 extends capacity to UTF8 source declarations, independently of the
+strict complete-projection API. The original source EOF is checked before
+capacity conversion: a mismatched nominal final span is a typed stream error
+(7339/state1/class16), or the native UTF8 MAX-target BCP error
+(4896/state7/class17). A final span with no recognized lead is the distinct
+9833/state2/class16 boundary failure. These are core observations, not endpoint
+ERROR tokens or a whole-load transaction implementation.
+
+Native UTF8 keeps original bytes. Bounded native UTF8 admission checks the full
+overflow for ASCII spaces, with nominal fitting and fixed padding. Cross-target
+MAX conversion examines a fitted source window of three times the target width;
+bounded sources use the complete source. The captured width1–4 controls retain
+the last checked nonspace/NUL versus a later discarded nonspace. Cropping an
+incomplete variation selector can also discard its preceding base. Original
+source EOF admission remains stricter than this internal window-fitting step.
+
+For Unicode targets, capacity counts decoded UTF16 units and preserves complete
+supplementary pairs. Native CP1251/CP1252 admission checks source bytes in the
+conversion window before applying codepage mapping; converted length alone is
+insufficient. UTF8 ideographic space into VARCHAR(1) fails2628 although its
+codepage projection occupies one byte. SQL-specific malformed repair consumes
+forbidden lead/second-byte pairs together. No platform lossy string supplies an
+oracle. The final payload is preflighted and allocated fallibly; no expanded
+intermediate is required.
+
+The new pure replay preserves all512 original task940 outcomes (248 successful
+observations/496 row applications and264 failed loads), plus4032 earlier
+admitted UTF8 observations/8064 applications/224 failed loads from boundary913,
+bounded-target919, octet925 and multibyte930. Raw source/native bytes and SQL
+UTF16 units remain distinct from display. Original failed messages can contain
+lone surrogate escapes; their numeric diagnostic fields and empty readbacks are
+read without repairing those messages. Native and pure fixtures are unchanged.
+
+Private four-database/two-container matrices currently retain2816 additional
+capacity/window/selector/EOF observations with2312 failed loads. Tests preserve
+each run's original native/error oracle in lossless JSON literals. A separate
+MAX-source capture contains every63488 valid BMP scalar in original UTF8 order
+and preserves eight original CP1251/CP1252 native outputs. These supply507904
+codepage cells; CP1252 agrees exactly with its existing captured map. CP1251's
+663 non-question-mark cells are retained as a sorted constant table; supplementary
+units retain the original two-question-mark controls. NULL and empty, fixed
+padding, original-input and final-output limits and unchanged source are tested.
+
+Full frozen-revision workspace/native/client/audit verification and review remain
+pending while this task is in progress. Exact raw/source/reproduction hashes and
+full differences will be recorded before merge. These measured profiles do not
+admit arbitrary collations, general CAST/assignment, source CHAR, or public
+engine/catalog/Value/BulkLoad/wire integration.

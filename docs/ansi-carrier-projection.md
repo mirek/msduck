@@ -33,8 +33,8 @@ Full frozen-revision formatting, strict workspace Clippy, workspace Rust, all520
 `Plan::bulk_capacity` takes a `CapacityDeclaration` containing source encoding,
 bounded/MAX source form, target encoding, fixed/variable target family and SQL
 capacity. It validates these declaration facts with the completed deterministic
-`capacity::Plan` before any nullable input. CP1251/CP1252 sources are supported;
-UTF8 and opaque sources remain unsupported. Native CP1251/CP1252/UTF8 and SQL
+`capacity::Plan` before any nullable input. CP1251/CP1252/UTF8 sources are supported;
+opaque sources remain unsupported. Native CP1251/CP1252/UTF8 and SQL
 UTF16 targets retain their exact physical identities. The strict and stored
 projection constructors retain their independent behavior.
 
@@ -55,7 +55,7 @@ emit SQL Server2628 tokens or establish whole-BulkLoad transaction, counter or
 trigger behavior. Every fallible payload preparation precedes output mutation;
 the backend statement-atomicity tests cover this callback boundary.
 
-Task #938 is in progress. Its native suite retains all476 admitted original
+Task #938 merged as #939. Its native suite retains all476 admitted original
 observations from the unchanged conversion895, capacity899 and trailing909
 references (3248 row applications,64 failed loads), plus all1144 four-run
 CP1251 native/error oracles (2336 applications,920 failed loads). The latter
@@ -68,5 +68,18 @@ they do not substitute cell evaluation for complete endpoint token evidence.
 
 All27 focused native tests and strict workspace all-target Clippy passed in
 the existing locked Linux cache. Full frozen-revision verification, independent/
-Codex review, exact-head CI and merge remain pending. Engine/Value/catalog/BulkLoad/wire adoption is still required
+Codex reviews and required CI passed at `02d28278eb5658745fecd0f3d9a6560bdebc7859`.
+All520 clients passed and the325-case local audit retained zero raw differences
+from #937; #939 merged as `ca9a19752d6a27bb16f5a557df3c997b18dd0063`. Engine/Value/catalog/BulkLoad/wire adoption is still required
 for public runtime behavior; this internal adapter does not enable a collation.
+
+
+Task #944 pairs with the deterministic UTF8 capacity extension #942. The bulk
+constructor validates its own capacity domain before shared storage/resource
+validation, allowing UTF8-to-codepage capacity without relaxing strict complete
+projection. `Plan::new` still rejects UTF8-to-CP1251/CP1252 even for NULL. Whole
+chunk shape/tag/child/input checks and fallible output preparation are unchanged.
+The new callback suite replays all512 original task940 native/error outcomes
+(264 failed loads), preserving exact target bytes and SQL UTF16 units. Its native
+build/full verification is pending; source registration remains an internal
+caller-owned operation with no endpoint collation gate enabled.
