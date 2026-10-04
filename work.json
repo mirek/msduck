@@ -11706,6 +11706,30 @@
         "Use own existing tree/cache and locked Linux builder. Full exact-head AGENTS fmt/workspaceRust/strictall-targetClippy/npm/audit with preserved raw differences, independent and verifiedCodex review or authorized availability fallback, requiredCI; worker owns focusedPR, exact-head merge and registry/issue/project completion. Do not start until933 is actually merged and done."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmIPz"
+    },
+    {
+      "id": "ansi-native-capacity-adapter-v1",
+      "title": "Apply BulkLoad capacity through the native ANSI DuckDB bridge",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server compatibility goal; owner-captured capacity899/conversion895/trailing909 and completed capacity914/921 plus real native projection adapters932/936 establish explicit next missing effect bridge. No external input approved. Runtime engine/Value/catalog/wire work remains separately coordinated.",
+      "scope": [
+        "src/ansi_carrier/projection.rs",
+        "tests/ansi_capacity_projection.rs",
+        "docs/ansi-carrier-projection.md"
+      ],
+      "dependencies": [
+        "ansi-bulk-capacity-v1",
+        "ansi-cp1251-capacity-v1",
+        "ansi-stored-utf8-native-adapter-v1"
+      ],
+      "acceptance": [
+        "Add explicit caller-owned source/target identity, bounded/MAX source form, fixed/variable target family and capacity selection using the completed deterministic capacity::Plan. Preserve strict/stored projection constructors and encoding/declaration validation before NULLs. Reject opaque and UTF8 capacity sources and invalid declaration widths/forms without reading values. Retain native/UTF16 physical target and existing Unicode carrier ceilings.",
+        "Preflight entire native input chunk shape/capacity/tags/parent-child validity and original input budgets; finish every capacity conversion, checked output size/chunk budget and fallible payload allocation before output mutation. Keep SQL truncation distinguishable from resource/boundary errors, immutable input, NULL/empty/fixed padding and source-form-specific overflow windows. Native callback errors are not endpoint SQL2628 tokens.",
+        "Replay all476 original admitted capacity observations from immutable conversion895/capacity899/trailing909 references plus all1144 four-run CP1251 retained native/error oracles with real DuckDB callbacks, preserving actual failure and raw expected native bytes. Verify declarations/typed zero-row shapes, exact/one-above limits, initialized-output preservation after late truncation/resource/tag/child failures, statement atomicity and recovery, native persistence/Arrow and single volatile original evaluation across chunks. No original oracle or unrelated file changes.",
+        "Use own existing isolated tree and stock locked Linux cache with no new native cache or parallel agents. Full frozen-revision AGENTS fmt/workspaceRust/strictall-targetClippy/npm/audit with complete raw differences, independent and verified Codex review or authorized availability fallback, requiredCI, focused PR and exact-head merge; publish Done and verify linked issue/card. No engine.rs, Value, catalog gates, wire, admission or whole-load transaction edits; those are subsequent runtime integration."
+      ],
+      "issue": 938,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmOX0"
     }
   ]
 }
