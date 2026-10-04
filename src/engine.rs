@@ -992,8 +992,13 @@ impl Session {
             };
             let alias = match self.database.catalog().resolve(&self.db, &database.value)? {
                 Some(alias) => alias,
-                None if database.value == relations.current => relations.current.clone(),
-                None => continue,
+                // DuckDB's catalog name only where the engine generated it.
+                None if database.value == relations.current
+                    && database.span == sqlparser::tokenizer::Span::empty() =>
+                {
+                    relations.current.clone()
+                }
+                None => bail!("unsupported reference to function {function} in another database"),
             };
             if alias != relations.current {
                 bail!("unsupported reference to function {function} in another database");

@@ -857,6 +857,8 @@ fn three_part_functions_and_bracketed_views() {
         &mut session,
         "IF (SELECT master.dbo.f(i.id) FROM foo.dbo.items i WHERE i.id = 1) <> 2 THROW 50001, 'f', 1",
     );
+    // DuckDB's name for master's catalog is not a database name.
+    assert_eq!(fails(&mut session, "SELECT memory.dbo.f(1)").0, 40515);
     // Another database's function alone in a query.
     let (number, _, _, message) = fails(&mut session, "SELECT foo.dbo.f(1)");
     assert_eq!(number, 40515);
