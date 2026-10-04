@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {spawnSync} from 'node:child_process'
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, existsSync, lstatSync, symlinkSync} from 'node:fs'
+import {mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, existsSync, lstatSync, symlinkSync, unlinkSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {sourceSyncOptions, receiverCacheMigration, npmCacheSetup} from '../scripts/remote-build.mjs'
+import {sourceSyncOptions, receiverCacheMigration, npmCacheSetup, remoteTempDirectory, remotePathGuard, remoteTempSetup} from '../scripts/remote-build.mjs'
 
 function run(file, args, cwd, env = process.env) {
   const result = spawnSync(file, args, {cwd, env, encoding: 'utf8', timeout: 120_000})
@@ -250,4 +250,141 @@ test('remote client concurrency rejects shell text before SSH and exports a vali
       assert(!existsSync(recorded))
     }
   } finally {rmSync(temporary,{recursive:true,force:true})}
+})
+
+function temporarySetup(root, temporary, after = '') {
+  return spawnSync('bash', ['-c', `set -eu\n${remotePathGuard}\n${remoteTempSetup}\n${after}`], {
+    env: {...process.env, root, temporary, TMPDIR: '/deliberately-missing-shared-tmp'},
+    encoding: 'utf8', timeout: 10_000,
+  })
+}
+
+test('owned remote TMPDIR overrides shared temporary storage and retains files', () => {
+  const root = fixture('msduck-owned-temp-')
+  try {
+    for (const temporary of [remoteTempDirectory(root), remoteTempDirectory(root, `${root}/tmp-link-961`)]) {
+      const result = temporarySetup(root, temporary,
+        'file=$(mktemp "$TMPDIR/probe.XXXXXX"); printf retained > "$file"; printf "%s\\n" "$TMPDIR" "$file"')
+      assert.equal(result.status, 0, result.stderr)
+      const [effective, file] = result.stdout.trim().split('\n')
+      assert.equal(effective, temporary)
+      assert.equal(readFileSync(file, 'utf8'), 'retained')
+      assert.equal(statSync(temporary).mode & 0o777, 0o700)
+      assert.equal(temporarySetup(root, temporary).status, 0)
+      assert.equal(readFileSync(file, 'utf8'), 'retained')
+    }
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('temporary setup refuses unowned directories, markers and symlink paths', () => {
+  const root = fixture('msduck-temp-guards-')
+  try {
+    const temporary = join(root, 'tmp')
+    rmSync(join(root, '.msduck-build-workspace'))
+    assert.notEqual(temporarySetup(root, temporary).status, 0)
+    assert(!existsSync(temporary))
+    writeFileSync(join(root, '.msduck-build-workspace'), '')
+    mkdirSync(temporary)
+    writeFileSync(join(temporary, 'keep'), 'unowned')
+    assert.notEqual(temporarySetup(root, temporary).status, 0)
+    assert.equal(readFileSync(join(temporary, 'keep'), 'utf8'), 'unowned')
+    rmSync(temporary, {recursive: true})
+    const outside = join(root, 'outside')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'keep'), 'external')
+    symlinkSync(outside, temporary)
+    assert.notEqual(temporarySetup(root, temporary).status, 0)
+    assert.equal(readFileSync(join(outside, 'keep'), 'utf8'), 'external')
+    unlinkSync(temporary)
+    mkdirSync(temporary)
+    symlinkSync(join(outside, 'keep'), join(temporary, '.msduck-build-temp'))
+    assert.notEqual(temporarySetup(root, temporary).status, 0)
+    const alias = join(root, 'alias')
+    symlinkSync(root, alias)
+    assert.notEqual(temporarySetup(`${alias}/child`, `${alias}/child/tmp`).status, 0)
+    assert(!existsSync(join(root, 'child')))
+    for (const value of [outside, `${root}/tmp-../../outside`, `${root}/tmp-a/child`]) {
+      assert.notEqual(temporarySetup(root, value).status, 0)
+    }
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('temporary path configuration rejects escape and shell text before SSH', () => {
+  const root = fixture('msduck-temp-config-')
+  try {
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const recorded = join(root, 'ssh-arguments')
+    writeFileSync(join(bin, 'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$MSDUCK_TEST_SSH_RECORD"\nexit 1\n', {mode: 0o755})
+    const env = {...process.env, PATH: `${bin}:${process.env.PATH}`, MSDUCK_TEST_SSH_RECORD: recorded,
+      MSDUCK_BUILD_HOST: 'linux.local', MSDUCK_BUILD_DIR: root, MSDUCK_CLIENT_JOBS: '4'}
+    for (const value of ['/tmp', root, `${root}/source`, `${root}/tmp-../other`, `${root}/tmp-foo/child`,
+      `${root}/tmp-$(touch stolen)`, `${root}/tmp-x;touch-stolen`, `${root}/tmp-`, '']) {
+      assert.throws(() => remoteTempDirectory(root, value), /MSDUCK_BUILD_TMPDIR/)
+      const bad = spawnSync(process.execPath, ['scripts/remote-build.mjs', 'fast'], {
+        env: {...env, MSDUCK_BUILD_TMPDIR: value}, encoding: 'utf8', timeout: 10000,
+      })
+      assert.notEqual(bad.status, 0)
+      assert.match(bad.stderr, /MSDUCK_BUILD_TMPDIR/)
+      assert(!existsSync(recorded))
+    }
+    for (const directory of ['/', '///', 'relative', '/owned/../outside']) {
+      assert.throws(() => remoteTempDirectory(directory), /MSDUCK_BUILD_DIR/)
+    }
+    assert.equal(remoteTempDirectory(`${root}/`), `${root}/tmp`)
+    const good = spawnSync(process.execPath, ['scripts/remote-build.mjs', 'fast'], {
+      env: {...env, MSDUCK_BUILD_TMPDIR: `${root}/tmp-proof`}, encoding: 'utf8', timeout: 10000,
+    })
+    assert.notEqual(good.status, 0) // fixture SSH intentionally stops before synchronization
+    const script = readFileSync(recorded, 'utf8')
+    assert(script.indexOf('flock -n 9') < script.indexOf('export TMPDIR='))
+    assert(script.indexOf('export TMPDIR=') < script.indexOf('__MSDUCK_REMOTE_READY__'))
+    assert(script.indexOf('export TMPDIR=') < script.indexOf('cargo test'))
+  } finally { rmSync(root, {recursive: true, force: true}) }
+})
+
+test('emitted remote shell owns temporary files only after acquiring the workspace lock', () => {
+  const root = fixture('msduck-temp-shell-')
+  try {
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const recorded = join(root, 'ssh-arguments')
+    writeFileSync(join(bin, 'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$MSDUCK_TEST_SSH_RECORD"\nexit 1\n', {mode: 0o755})
+    writeFileSync(join(bin, 'flock'), '#!/bin/sh\nprintf lock > "$MSDUCK_TEST_LOCK_TRACE"\nexit "$MSDUCK_TEST_LOCK_STATUS"\n', {mode: 0o755})
+    writeFileSync(join(bin, 'sha256sum'), '#!/bin/sh\nprintf "digest\\n"\n', {mode: 0o755})
+    writeFileSync(join(bin, 'npm'), `#!/bin/sh
+if [ "$1" = ci ]; then mkdir -p node_modules; exit 0; fi
+[ -f "$MSDUCK_TEST_LOCK_TRACE" ] || exit 90
+file=$(mktemp "$TMPDIR/executed.XXXXXX")
+printf actual > "$file"
+printf '%s\\n' "$TMPDIR" "$file" > "$MSDUCK_TEST_TEMP_RESULT"
+`, {mode: 0o755})
+    const env = {...process.env, PATH: `${bin}:${process.env.PATH}`, MSDUCK_TEST_SSH_RECORD: recorded,
+      MSDUCK_BUILD_HOST: 'linux.local', MSDUCK_BUILD_DIR: root, MSDUCK_CLIENT_JOBS: '4',
+      MSDUCK_TEST_LOCK_TRACE: join(root, 'lock-trace'), MSDUCK_TEST_LOCK_STATUS: '1',
+      MSDUCK_TEST_TEMP_RESULT: join(root, 'temp-result'), TMPDIR: '/nonexistent-shared-tmp'}
+    delete env.MSDUCK_BUILD_TMPDIR
+    const capture = spawnSync(process.execPath, ['scripts/remote-build.mjs', 'test'], {env, encoding: 'utf8', timeout: 10000})
+    assert.notEqual(capture.status, 0)
+    const argumentsText = readFileSync(recorded, 'utf8')
+    const emitted = argumentsText.slice(argumentsText.indexOf('bash -c ')).trim()
+    const execute = status => spawnSync('bash', ['-c', emitted], {
+      env: {...env, MSDUCK_TEST_LOCK_STATUS: status}, input: '\n', encoding: 'utf8', timeout: 10000,
+    })
+    assert.notEqual(execute('1').status, 0)
+    assert(!existsSync(join(root, 'tmp')))
+    assert(!existsSync(join(root, 'temp-result')))
+    const result = execute('0')
+    assert.equal(result.status, 0, result.stderr)
+    const [effective, file] = readFileSync(join(root, 'temp-result'), 'utf8').trim().split('\n')
+    assert.equal(effective, join(root, 'tmp'))
+    assert.equal(readFileSync(file, 'utf8'), 'actual')
+    assert.match(result.stdout, /__MSDUCK_REMOTE_READY__/)
+    const external = join(root, 'external-lock')
+    writeFileSync(external, 'keep')
+    unlinkSync(join(root, 'runner.lock'))
+    symlinkSync(external, join(root, 'runner.lock'))
+    assert.notEqual(execute('0').status, 0)
+    assert.equal(readFileSync(external, 'utf8'), 'keep')
+  } finally { rmSync(root, {recursive: true, force: true}) }
 })

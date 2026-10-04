@@ -45,6 +45,72 @@ if [ ! -d node_modules ] || [ ! -f "$root/npm-lock.sha256" ] || [ "$(cat "$root/
 fi
 `
 
+// Only a dedicated direct child of the workspace may hold remote temporaries.
+export function remoteTempDirectory(directory, configured) {
+  const root = directory.replace(/\/+$/, '')
+  if (!root || !/^\/[a-zA-Z0-9_./-]+$/.test(root) || root.split('/').includes('..')) {
+    throw new Error('MSDUCK_BUILD_DIR must identify an absolute non-root workspace.')
+  }
+  const value = configured ?? `${root}/tmp`
+  if (value !== `${root}/tmp` && !(value.startsWith(`${root}/tmp-`)
+      && /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value.slice(root.length + 5)))) {
+    throw new Error('MSDUCK_BUILD_TMPDIR must be MSDUCK_BUILD_DIR/tmp or a direct tmp-NAME child.')
+  }
+  return value
+}
+
+// Guard every existing path component, including ancestors of the workspace.
+export const remotePathGuard = `
+check_path=$root
+while [ "$check_path" != / ]; do
+  if [ -L "$check_path" ]; then
+    echo 'Refusing a symlink in the remote workspace path.' >&2
+    exit 1
+  fi
+  check_path=$(dirname "$check_path")
+done
+`
+
+// This fragment runs under runner.lock, after workspace ownership, before sync.
+// Retain owned temporary files; never delete arbitrary paths or shared /tmp.
+export const remoteTempSetup = `
+if [ ! -f "$root/.msduck-build-workspace" ] || [ -L "$root/.msduck-build-workspace" ] || [ ! -O "$root/.msduck-build-workspace" ]; then
+  echo 'Refusing temporary directory setup in an unowned workspace.' >&2
+  exit 1
+fi
+case "$temporary" in
+  "$root/tmp") ;;
+  "$root"/tmp-*)
+    suffix=\${temporary#"$root/tmp-"}
+    case "$suffix" in
+      ''|[!a-zA-Z0-9]*|*[!a-zA-Z0-9_-]*) echo 'Refusing invalid temporary directory name.' >&2; exit 1 ;;
+    esac ;;
+  *) echo 'Refusing temporary directory outside the workspace.' >&2; exit 1 ;;
+esac
+if [ -L "$temporary" ] || [ -L "$temporary/.msduck-build-temp" ]; then
+  echo 'Refusing a temporary directory or marker symlink.' >&2
+  exit 1
+fi
+if [ -e "$temporary" ] && [ ! -d "$temporary" ]; then
+  echo 'Refusing a non-directory temporary path.' >&2
+  exit 1
+fi
+mkdir -p -m 700 "$temporary"
+if [ ! -O "$temporary" ] || { [ -e "$temporary/.msduck-build-temp" ] && [ ! -O "$temporary/.msduck-build-temp" ]; }; then
+  echo 'Refusing a temporary directory owned by another user.' >&2
+  exit 1
+fi
+if [ ! -f "$temporary/.msduck-build-temp" ]; then
+  if [ -n "$(find "$temporary" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    echo 'Refusing an existing unowned temporary directory.' >&2
+    exit 1
+  fi
+  touch "$temporary/.msduck-build-temp"
+fi
+chmod 700 "$temporary"
+export TMPDIR="$temporary"
+`
+
 async function main() {
 const root = fileURLToPath(new URL('../', import.meta.url))
 process.chdir(root)
@@ -75,6 +141,7 @@ if (!host || !/^[a-zA-Z0-9][a-zA-Z0-9._@-]*$/.test(host)
   console.error('Set MSDUCK_BUILD_HOST, an absolute MSDUCK_BUILD_DIR, and positive MSDUCK_BUILD_JOBS in .env (see .env.example).')
   process.exit(2)
 }
+const temporary = remoteTempDirectory(directory, process.env.MSDUCK_BUILD_TMPDIR)
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`
 const sshOptions = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15']
 const marker = '__MSDUCK_REMOTE_READY__'
@@ -85,8 +152,14 @@ export PATH="$HOME/.cargo/bin:$PATH"
 export CARGO_BUILD_JOBS=${quote(jobs)}
 export MSDUCK_CLIENT_JOBS=${quote(String(clientConcurrency))}
 ${toolchain ? `export RUSTUP_TOOLCHAIN=${quote(toolchain)}` : ""}
-root=${quote(directory)}
+root=${quote(directory.replace(/\/+$/, ''))}
+temporary=${quote(temporary)}
+${remotePathGuard}
 mkdir -p "$root"
+if [ -L "$root/runner.lock" ] || [ -L "$root/.msduck-build-workspace" ]; then
+  echo 'Refusing a workspace lock or ownership marker symlink.' >&2
+  exit 1
+fi
 exec 9>"$root/runner.lock"
 flock -n 9 || { echo 'Another remote msduck run owns this workspace.' >&2; exit 1; }
 if [ ! -f "$root/.msduck-build-workspace" ]; then
@@ -96,6 +169,7 @@ if [ ! -f "$root/.msduck-build-workspace" ]; then
   fi
   touch "$root/.msduck-build-workspace"
 fi
+${remoteTempSetup}
 ${receiverCacheMigration}
 mkdir -p "$root/source"
 printf '%s\\n' ${quote(marker)}

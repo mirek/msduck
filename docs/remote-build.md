@@ -38,6 +38,33 @@ npm run remote -- verify # all Rust/client/audit checks after one synchronizatio
 one synchronized source snapshot. This avoids a later phase picking up local
 edits made while an earlier phase was running.
 
+Remote commands export `TMPDIR` to `MSDUCK_BUILD_DIR/tmp` before dependency
+installation, synchronization readiness, Cargo, clients and audit. This directory
+is outside the synchronized source and survives rsync. Shared `/tmp` exhaustion
+therefore does not determine where linker and test temporary files are created.
+An optional `MSDUCK_BUILD_TMPDIR` may select a direct `tmp-NAME` child of the same
+workspace, with NAME beginning with an ASCII letter or digit and containing only
+letters, digits, underscores or hyphens. Arbitrary absolute paths, nested paths,
+source/cache paths and shell text are rejected before SSH. Local `TMPDIR` is not
+forwarded; local test fixtures still need their own worktree `.tmp` setting.
+
+The existing `runner.lock` covers temporary-directory ownership and all subsequent
+synchronization and execution. Workspace ancestors, temporary directory and
+ownership marker symlinks are refused. A new or empty dedicated directory gains
+an ownership marker and mode 0700; a nonempty directory without that marker is
+refused. A directory owned by another user is refused. Existing owned temporary
+files are retained, including after failures; the runner does not recursively
+clean configured paths, shared `/tmp` or other workers' directories. Tools normally
+remove their own files. Inspect retained files and remove only identified obsolete
+files in the owned directory when no run holds its workspace lock. Monitor both
+free bytes and free inodes; retention is not an automatic quota or garbage collector.
+
+`tests/remote-build.test.mjs` executes the temporary setup and complete emitted
+shell in isolated fixtures, including effective `TMPDIR` and actual `mktemp`
+files, overrides, ownership/symlink refusal, injection rejection before SSH and
+lock failure before temporary setup. The shell fixture stubs Cargo-independent
+npm and flock; it does not claim a native build or Linux concurrency proof.
+
 Ordinary `npm test` and `npm run audit:local` continue to run locally. Each remote
 command syncs uncommitted and untracked source edits too. Avoid editing sources
 while synchronization is in progress. Linux executables stay on Linux; the runner
