@@ -57,6 +57,55 @@ struct Scope {
     tables: HashSet<String>,
     qualifiers: HashMap<String, HashSet<String>>,
     defined: HashSet<String>,
+    /// Known names can rule out a collision without inventing column types.
+    unknown_columns: HashMap<String, Option<HashSet<String>>>,
+    ctes: HashMap<String, Option<HashSet<String>>>,
+}
+
+fn projected_names(query: &Query) -> Option<HashSet<String>> {
+    fn body_names(body: &SetExpr) -> Option<HashSet<String>> {
+        match body {
+            SetExpr::Select(select) => select
+                .projection
+                .iter()
+                .map(|item| match item {
+                    SelectItem::ExprWithAlias { alias, .. } => Some(lower(alias)),
+                    SelectItem::UnnamedExpr(Expr::Identifier(id)) => Some(lower(id)),
+                    SelectItem::UnnamedExpr(Expr::CompoundIdentifier(parts)) => {
+                        parts.last().map(lower)
+                    }
+                    _ => None,
+                })
+                .collect(),
+            SetExpr::SetOperation { left, .. } => body_names(left),
+            SetExpr::Query(query) => projected_names(query),
+            _ => None,
+        }
+    }
+    body_names(&query.body)
+}
+
+// Predicate collection precedes execution's target canonicalization. Resolve
+// alias targets on a private copy, retaining WITH for CTE shadowing rules.
+// A rejected write keeps its original conservative bindings; execution reports
+// the canonicalizer's diagnostic later.
+fn canonical_write(statement: &Statement) -> Option<Statement> {
+    if !matches!(statement, Statement::Update(_) | Statement::Delete(_))
+        && !matches!(statement, Statement::Query(query)
+            if matches!(query.body.as_ref(), SetExpr::Update(_) | SetExpr::Delete(_)))
+    {
+        return None;
+    }
+    let mut canonical = statement.clone();
+    msduck_sql::update::canonicalize(&mut canonical).ok()?;
+    msduck_sql::delete::canonicalize(&mut canonical).ok()?;
+    Some(canonical)
+}
+
+fn canonical_node<T: 'static>(node: &T) -> Option<Statement> {
+    (node as &dyn std::any::Any)
+        .downcast_ref::<Statement>()
+        .and_then(canonical_write)
 }
 
 // Collect only sources in this SELECT or statement; nested queries have their
@@ -64,6 +113,7 @@ struct Scope {
 #[derive(Default)]
 struct LocalRelations {
     relations: Relations,
+    unknown_columns: HashMap<String, Option<HashSet<String>>>,
     depth: usize,
 }
 impl Visitor for LocalRelations {
@@ -88,7 +138,26 @@ impl Visitor for LocalRelations {
     }
     fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
         if self.depth == 0 {
-            self.relations.pre_visit_table_factor(factor)
+            let result = self.relations.pre_visit_table_factor(factor);
+            if let TableFactor::Derived {
+                alias: Some(alias),
+                subquery,
+                ..
+            } = factor
+            {
+                let names = if alias.columns.is_empty() {
+                    projected_names(subquery)
+                } else {
+                    Some(alias.columns.iter().map(|c| lower(&c.name)).collect())
+                };
+                let key = format!("\0derived{}", self.unknown_columns.len());
+                if let Some(tables) = self.relations.qualifiers.get_mut(&lower(&alias.name)) {
+                    tables.remove(DERIVED);
+                    tables.insert(key.clone());
+                }
+                self.unknown_columns.insert(key, names);
+            }
+            result
         } else {
             ControlFlow::Continue(())
         }
@@ -306,10 +375,26 @@ impl Catalog {
                 .map(|t| renamed.get(t).unwrap_or(t).clone())
                 .collect();
         }
+        let mut unknown_columns = local.unknown_columns;
+        for table in relations.qualifiers.values().flatten() {
+            if self.tables.contains_key(table) || unknown_columns.contains_key(table) {
+                continue;
+            }
+            if let Some(names) = self
+                .scopes
+                .iter()
+                .rev()
+                .find_map(|scope| scope.ctes.get(table))
+            {
+                unknown_columns.insert(table.clone(), names.clone());
+            }
+        }
         catalog.scopes.push(Scope {
             tables: relations.qualifiers.values().flatten().cloned().collect(),
             qualifiers: relations.qualifiers,
             defined: relations.defined,
+            unknown_columns,
+            ctes: HashMap::new(),
         });
         catalog
     }
@@ -327,16 +412,42 @@ impl Catalog {
                 scope
                     .defined
                     .extend(cte.alias.columns.iter().map(|c| lower(&c.name)));
+                let names = if cte.alias.columns.is_empty() {
+                    projected_names(&cte.query)
+                } else {
+                    Some(cte.alias.columns.iter().map(|c| lower(&c.name)).collect())
+                };
+                scope.ctes.insert(lower(&cte.alias.name), names);
             }
         }
         catalog.scopes.push(scope);
-        catalog
+        // WITH can wrap writes in a Query whose body never visits a SELECT.
+        // Keep its targets/FROM sources visible, excluding nested queries.
+        let canonical = matches!(query.body.as_ref(), SetExpr::Update(_) | SetExpr::Delete(_))
+            .then(|| canonical_write(&Statement::Query(Box::new(query.clone()))))
+            .flatten();
+        let query = match &canonical {
+            Some(Statement::Query(query)) => query.as_ref(),
+            _ => query,
+        };
+        match query.body.as_ref() {
+            SetExpr::Insert(statement)
+            | SetExpr::Update(statement)
+            | SetExpr::Delete(statement)
+            | SetExpr::Merge(statement) => catalog.local_scope(statement),
+            _ => catalog,
+        }
     }
 
     /// The columns of the relations `node` reads, from DuckDB's catalog.
-    pub fn load<T: Visit>(db: &duckdb::Connection, node: &T) -> Result<Self> {
+    pub fn load<T: Visit + 'static>(db: &duckdb::Connection, node: &T) -> Result<Self> {
         let mut relations = Relations::default();
-        let _ = node.visit(&mut relations);
+        let canonical = canonical_node(node);
+        if let Some(canonical) = &canonical {
+            let _ = canonical.visit(&mut relations);
+        } else {
+            let _ = node.visit(&mut relations);
+        }
         let mut catalog = Catalog {
             tables: relations.openjson,
             qualifiers: relations.qualifiers,
@@ -407,7 +518,10 @@ impl Catalog {
             }
         }
         catalog.names = relations.names;
-        Ok(catalog.local_scope(node))
+        Ok(match &canonical {
+            Some(canonical) => catalog.local_scope(canonical),
+            None => catalog.local_scope(node),
+        })
     }
 
     /// Add the SQL Server declarations of the carrier columns, which costs
@@ -520,8 +634,17 @@ impl Catalog {
                     }
                     _ => return None,
                 };
-                // Unknown local sources can shadow an outer bare reference.
-                if tables.iter().any(|t| !self.tables.contains_key(t)) {
+                // Unknown local sources can shadow a bare reference unless
+                // their explicit output names prove the column is absent.
+                if tables.iter().any(|t| {
+                    !self.tables.contains_key(t)
+                        && (matches!(expr, Expr::CompoundIdentifier(_))
+                            || scope
+                                .unknown_columns
+                                .get(t)
+                                .and_then(Option::as_ref)
+                                .is_none_or(|names| names.contains(&name)))
+                }) {
                     return None;
                 }
                 let columns: Vec<&Column> = tables

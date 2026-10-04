@@ -340,3 +340,99 @@ fn scoped_set_pinning_keeps_carrier_and_text_branches_bindable() {
         .unwrap();
     assert_eq!(values, vec!["a", "b"]);
 }
+
+#[test]
+fn cte_wrapped_writes_keep_their_carrier_targets_visible() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "CREATE TABLE scope_writes(id INT,nv NVARCHAR(10)); INSERT scope_writes VALUES(1,NULL),(2,NULL),(3,NULL)",
+        "WITH c AS(SELECT 1 AS id) UPDATE scope_writes SET nv=COALESCE(scope_writes.nv,N'x') WHERE id IN(SELECT id FROM c)",
+        "WITH c AS(SELECT 2 AS id) DELETE scope_writes WHERE id IN(SELECT id FROM c) AND COALESCE(scope_writes.nv,N'x')=N'x'",
+        "WITH c AS(SELECT 3 AS id) MERGE scope_writes AS t USING c AS s ON t.id=s.id WHEN MATCHED THEN UPDATE SET nv=COALESCE(t.nv,N'z');",
+    ] {
+        let (response, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {response:?}");
+    }
+    let rows: Vec<(i32, String)> = session
+        .db
+        .prepare("SELECT id,__msduck_carrier_utf8(nv) FROM scope_writes ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![(1, "x".into()), (3, "z".into())]);
+}
+
+#[test]
+fn explicit_peer_names_do_not_hide_unqualified_write_targets() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "CREATE TABLE scope_peers(id INT,nv NVARCHAR(10)); INSERT scope_peers VALUES(1,NULL),(2,NULL),(3,NULL)",
+        "WITH c AS(SELECT 1 AS id) UPDATE scope_peers SET nv=COALESCE(nv,N'x') FROM c WHERE scope_peers.id=c.id",
+        "UPDATE scope_peers SET nv=COALESCE(nv,N'y') FROM(SELECT 2 AS id) d WHERE scope_peers.id=d.id",
+        "WITH c(id) AS(SELECT 3) UPDATE t SET nv=COALESCE(t.nv,N'a') FROM scope_peers AS t JOIN c ON t.id=c.id",
+    ] {
+        let (response, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {response:?}");
+    }
+    let rows: Vec<(i32, String)> = session
+        .db
+        .prepare("SELECT id,__msduck_carrier_utf8(nv) FROM scope_peers ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![(1, "x".into()), (2, "y".into()), (3, "a".into())]
+    );
+    // A peer that actually has nv still makes a bare nv ambiguous; no type
+    // is guessed from either source and neither target row may change.
+    let(_,ok)=session.batch_response(
+        "WITH c AS(SELECT 1 AS id,N'peer' AS nv) UPDATE scope_peers SET nv=COALESCE(nv,N'z') FROM c WHERE scope_peers.id=c.id",
+        &Default::default(),false,None);
+    assert!(!ok);
+    let value: String = session
+        .db
+        .query_row(
+            "SELECT __msduck_carrier_utf8(nv) FROM scope_peers WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(value, "x");
+}
+
+#[test]
+fn write_target_aliases_ignore_unrelated_same_named_tables() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "CREATE TABLE t(nv VARCHAR(10)); INSERT t VALUES('unrelated'); CREATE TABLE alias_writes(id INT,nv NVARCHAR(10)); INSERT alias_writes VALUES(1,NULL),(2,NULL),(3,NULL),(4,NULL)",
+        "UPDATE t SET nv=COALESCE(t.nv,N'x') FROM alias_writes AS t WHERE t.id=1",
+        "WITH c(id) AS(SELECT 2) UPDATE t SET nv=COALESCE(t.nv,N'y') FROM alias_writes AS t JOIN c ON t.id=c.id",
+        "DELETE t FROM alias_writes AS t WHERE t.id=3 AND COALESCE(t.nv,N'z')=N'z'",
+        "WITH c(id) AS(SELECT 4) DELETE t FROM alias_writes AS t JOIN c ON t.id=c.id WHERE COALESCE(t.nv,N'z')=N'z'",
+    ] {
+        let (response, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {response:?}");
+    }
+    let rows: Vec<(i32, String)> = session
+        .db
+        .prepare("SELECT id,__msduck_carrier_utf8(nv) FROM alias_writes ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![(1, "x".into()), (2, "y".into())]);
+    let unrelated: String = session
+        .db
+        .query_row("SELECT nv FROM t", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(unrelated, "unrelated");
+}
