@@ -12,10 +12,10 @@ Each worker needs an isolated worktree and its own receipt. See
 `docs/parallel-collaboration.md` for worker, reviewer and integrator roles.
 Keep temporary files in a private directory under the RAM-backed `/tmp`
 (`TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX) && export TMPDIR`; stop if
-`mktemp` fails), and delete it, and
-stop every server or container you started, when the run or task ends. Never
-delete other workers' or sessions' files there; see "Temporary files" in
-`docs/agent-work.md`.
+`mktemp` fails). Delete it, and stop every server or container you started,
+when the run or task ends. Do not delete files of live workers or other
+sessions; abandoned msduck directories may be removed only under the rule in
+"Temporary files" in `docs/agent-work.md`.
 Sessions often run unattended for days. Resolve stale claims and reservations
 that block approved work yourself, with recorded evidence, under the standing
 authorization in `docs/agent-work.md`, and report the resolution afterwards

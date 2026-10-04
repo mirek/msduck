@@ -124,6 +124,10 @@ filled it.
 - Some tools cannot read `/tmp`. A Snap-packaged `gh`, for example, sees its
   own private `/tmp`, so write files passed to it (PR bodies, publication
   change files) under your worktree's ignored `artifacts/` instead.
+- Some older guides and scripts, such as `docs/reference-captures.md` and a
+  few `scripts/capture-*.mjs`, still write to the git-ignored worktree
+  `.tmp/`. That keeps working; clean it up under the same rules, and prefer
+  your `/tmp` directory for new work.
 - Never touch other sessions' harness directories, such as
   `/tmp/claude-<uid>/`. Deleting a live session's directory breaks every shell
   command in that session until it is restarted.

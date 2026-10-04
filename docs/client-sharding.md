@@ -27,7 +27,7 @@ Build first, then run from an immutable source/executable snapshot:
 
 ```sh
 node scripts/run-client-shards.mjs --suite npm --plan-only --jobs 4
-node scripts/run-client-shards.mjs --suite npm --jobs 4 --output .tmp/client-shards/example
+node scripts/run-client-shards.mjs --suite npm --jobs 4 --output "$TMPDIR/client-shards/example"
 ```
 
 Concurrency defaults to one and is bounded to 1–16 worker processes. Each job
