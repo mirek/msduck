@@ -844,3 +844,39 @@ fn modules_of_other_databases_are_refused_and_ctes_are_not_view_dependencies() {
         "IF (SELECT COUNT(*) FROM foo.dbo.innocent i JOIN dbo.loc l ON l.id = i.id) <> 1 THROW 50001, 'innocent', 1",
     );
 }
+
+#[test]
+fn three_part_functions_and_bracketed_views() {
+    let (_server, mut session) = fixture();
+    ok(
+        &mut session,
+        "CREATE FUNCTION dbo.f(@x INT) RETURNS INT AS BEGIN RETURN @x + 1 END",
+    );
+    // The current database's function named with three parts.
+    ok(
+        &mut session,
+        "IF (SELECT master.dbo.f(i.id) FROM foo.dbo.items i WHERE i.id = 1) <> 2 THROW 50001, 'f', 1",
+    );
+    // Another database's function alone in a query.
+    let (number, _, _, message) = fails(&mut session, "SELECT foo.dbo.f(1)");
+    assert_eq!(number, 40515);
+    assert!(
+        message.starts_with("unsupported reference to function"),
+        "{message}"
+    );
+    // A bracketed view name still counts as reading catalog views.
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.cols AS SELECT name FROM sys.columns",
+    );
+    ok(&mut session, "USE master");
+    assert_eq!(
+        fails(
+            &mut session,
+            "SELECT c.name FROM foo.dbo.[cols] c JOIN dbo.loc l ON 1 = 1"
+        )
+        .0,
+        40515
+    );
+}

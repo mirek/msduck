@@ -984,9 +984,20 @@ impl Session {
             self.current_alias()?,
             &statement.map(alias_targets).unwrap_or_default(),
         );
-        // Modules of other databases are not resolved.
-        if let Some(function) = &relations.foreign_function {
-            bail!("unsupported reference to function {function} in another database");
+        // Modules of other databases are not resolved; the current
+        // database's may be named with three parts.
+        for function in &relations.qualified_functions {
+            let Some(database) = function.0.first().and_then(|part| part.as_ident()) else {
+                continue;
+            };
+            let alias = match self.database.catalog().resolve(&self.db, &database.value)? {
+                Some(alias) => alias,
+                None if database.value == relations.current => relations.current.clone(),
+                None => continue,
+            };
+            if alias != relations.current {
+                bail!("unsupported reference to function {function} in another database");
+            }
         }
         let Some((database, written)) = relations.foreign.first_key_value() else {
             return Ok(CrossDatabase::Local);
@@ -1014,10 +1025,10 @@ impl Session {
                         crate::query_catalog::catalog_dependent_views(&self.db, &database.value)?,
                     );
                 }
-                let key = (
-                    schema.to_string().trim_matches('"').to_lowercase(),
-                    object.to_string().trim_matches('"').to_lowercase(),
-                );
+                let (Some(schema), Some(object)) = (schema.as_ident(), object.as_ident()) else {
+                    continue;
+                };
+                let key = (schema.value.to_lowercase(), object.value.to_lowercase());
                 if dependent[&database.value].contains(&key) {
                     catalog_views = true;
                 }
@@ -8164,8 +8175,8 @@ struct Relations {
     /// Whether the statement calls schema-qualified (user) functions, which
     /// bind in the session's database.
     routines: bool,
-    /// A three-part function call, which names another database's module.
-    foreign_function: Option<String>,
+    /// Three-part function calls, which may name another database's module.
+    qualified_functions: Vec<ObjectName>,
 }
 impl Relations {
     fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
@@ -8299,8 +8310,7 @@ impl Visitor for Relations {
             self.functions.push(name);
             self.routines |= name.0.len() > 1;
             if name.0.len() > 2 {
-                self.foreign_function
-                    .get_or_insert_with(|| name.to_string());
+                self.qualified_functions.push(name.clone());
             }
         }
         ControlFlow::Continue(())
@@ -8309,8 +8319,7 @@ impl Visitor for Relations {
         if let Expr::Function(function) = expr {
             self.routines |= function.name.0.len() > 1;
             if function.name.0.len() > 2 {
-                self.foreign_function
-                    .get_or_insert_with(|| function.name.to_string());
+                self.qualified_functions.push(function.name.clone());
             }
         }
         ControlFlow::Continue(())
@@ -8391,7 +8400,7 @@ fn names_other_databases(statement: &Statement) -> bool {
     matches!(
         statement,
         Statement::Query(_) | Statement::Insert(_) | Statement::Update(_) | Statement::Delete(_)
-    ) && visit_relations(statement, |relation| {
+    ) && (visit_relations(statement, |relation| {
         if relation.0.len() >= 3 {
             ControlFlow::Break(())
         } else {
@@ -8399,6 +8408,11 @@ fn names_other_databases(statement: &Statement) -> bool {
         }
     })
     .is_break()
+        || visit_expressions(statement, |expr| match expr {
+            Expr::Function(function) if function.name.0.len() >= 3 => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_break())
 }
 
 /// Where `Session::execute` runs a statement.
