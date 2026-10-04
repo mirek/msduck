@@ -275,7 +275,7 @@ test('all160 declared/wire/target profiles retain every original row, counter an
   const [name,x]=observed[i];assert.equal(o.case.name,name);assert.deepEqual(o.case,cases[i]);assert.deepEqual(o.input,rowsFor(cases[i]));
   assert.deepEqual(o.readback.result.sets.map(s=>s.rows),x.rows,name);assert.deepEqual(o.execution.result.errors.map(e=>[e.number,e.state,e.class]),x.errors,name);assert.deepEqual(o.execution.result.info.map(e=>[e.number,e.state,e.class]),x.info,name);assert.equal(o.execution.result.rowCount,x.rowCount,name);assert.equal(o.execution.result.error?.number??null,x.callback,name);assert.equal(o.readback.session,'original');assert.equal(o.recoveryReadback,undefined)
  }
- const replay=spawnSync(process.execPath,['scripts/capture-bulk-character-metadata.mjs','--replay-fixture'],{cwd:new URL('../',import.meta.url),encoding:'utf8',env:{...process.env,PATH:''},timeout:15000});assert.equal(replay.status,0,replay.stderr)
+ const replay=spawnSync(process.execPath,['scripts/capture-bulk-character-metadata.mjs','--replay-fixture'],{cwd:new URL('../',import.meta.url),encoding:'utf8',env:{...process.env,PATH:''},timeout:15000});assert.equal(replay.status,0,replay.stderr);assert.match(replay.stdout,/Validated retained character metadata capture/)
 })
 
 test('uniform width/family/native/counter corruption and omitted profiles cannot disappear behind recomputed comparisons',async()=>{
