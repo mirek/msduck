@@ -16,6 +16,21 @@ pub struct Wire {
     pub nullable: bool,
 }
 
+impl Wire {
+    /// Shapes admitted by the measured modern character rules. This does not
+    /// establish source/target admission or interpret any current ROW payload.
+    pub fn is_supported_shape(self) -> bool {
+        match self.length {
+            WireLength::BoundedBytes(bytes) => {
+                bytes != 0
+                    && bytes <= 8000
+                    && (!matches!(self.family, Family::Nchar | Family::Nvarchar) || bytes % 2 == 0)
+            }
+            WireLength::Plp => matches!(self.family, Family::Varchar | Family::Nvarchar),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metadata {
     Admitted,
@@ -33,18 +48,8 @@ pub fn metadata(
     target_nullable: bool,
     target_max: bool,
 ) -> Metadata {
-    match wire.length {
-        WireLength::BoundedBytes(bytes)
-            if bytes == 0
-                || bytes > 8000
-                || (matches!(wire.family, Family::Nchar | Family::Nvarchar) && bytes % 2 != 0) =>
-        {
-            return Metadata::Unknown;
-        }
-        WireLength::Plp if matches!(wire.family, Family::Char | Family::Nchar) => {
-            return Metadata::Unknown;
-        }
-        _ => {}
+    if !wire.is_supported_shape() {
+        return Metadata::Unknown;
     }
     if declared.family() != wire.family || wire.nullable != target_nullable {
         return Metadata::FamilyOrNullability;

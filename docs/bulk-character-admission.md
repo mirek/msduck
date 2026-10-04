@@ -46,6 +46,10 @@ when the original incoming byte count also exceeds the declared source limit.
 Wire-only overflow remains the existing4804 path. Numeric/binary, odd-Unicode,
 PLP and framing error categories retain their existing behavior. Legacy wire
 families remain outside the new measured rules.
+Both source-row validation and fixed-source padding use the same modern shape
+gate; legacy0x27/0x2f and unsupported shapes retain their previous conversion
+and source-length handling. Independent review identified and corrected an
+initial mismatch between the metadata gate and these row/padding gates.
 
 Converted payload sizes include source padding, with checked arithmetic. Rows
 are staged as they are converted, so a small wire chunk cannot first expand a

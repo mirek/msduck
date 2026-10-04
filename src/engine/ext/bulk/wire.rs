@@ -120,6 +120,35 @@ fn wire_family(info: &TypeInfo) -> Option<Family> {
     })
 }
 
+fn character_wire(info: &TypeInfo, nullable: bool) -> Option<Wire> {
+    let family = match info.id {
+        0xa7 => CharacterFamily::Varchar,
+        0xaf => CharacterFamily::Char,
+        0xe7 => CharacterFamily::Nvarchar,
+        0xef => CharacterFamily::Nchar,
+        _ => return None,
+    };
+    let expected_unicode = matches!(family, CharacterFamily::Nvarchar | CharacterFamily::Nchar);
+    let length = match info.format {
+        ValueFormat::ShortLen { max, unicode } if unicode == expected_unicode => {
+            WireLength::BoundedBytes(u16::try_from(max).ok()?)
+        }
+        ValueFormat::Plp { unicode } if unicode == expected_unicode => WireLength::Plp,
+        _ => return None,
+    };
+    Some(Wire {
+        family,
+        length,
+        nullable,
+    })
+}
+
+/// Limit new ROW/padding behavior to the same explicitly supported shapes as
+/// metadata admission. Legacy and unknown formats retain predecessor behavior.
+pub(super) fn measured_character(info: &TypeInfo) -> bool {
+    character_wire(info, false).is_some_and(Wire::is_supported_shape)
+}
+
 /// What SQL Server checks for one column of the COLMETADATA token: the
 /// 4816 state of a mismatch, or `None`. The captured rules
 /// (reference/gaps-bulk.json): the wire type must belong to the declared
@@ -132,38 +161,15 @@ pub(super) fn incompatible(
     target_nullable: bool,
     target_max: bool,
 ) -> Option<u8> {
-    if let Type::Character(character) = declared {
-        let wire_family = match wire.type_info.id {
-            0xa7 => Some(CharacterFamily::Varchar),
-            0xaf => Some(CharacterFamily::Char),
-            0xe7 => Some(CharacterFamily::Nvarchar),
-            0xef => Some(CharacterFamily::Nchar),
-            _ => None,
-        };
-        let length = match wire.type_info.format {
-            ValueFormat::ShortLen { max, .. } => {
-                u16::try_from(max).ok().map(WireLength::BoundedBytes)
-            }
-            ValueFormat::Plp { .. } => Some(WireLength::Plp),
-            _ => None,
-        };
-        if let (Some(family), Some(length)) = (wire_family, length) {
-            match admission::metadata(
-                *character,
-                Wire {
-                    family,
-                    length,
-                    nullable: wire.flags & 1 != 0,
-                },
-                target_nullable,
-                target_max,
-            ) {
-                Metadata::Admitted => return None,
-                Metadata::FamilyOrNullability => return Some(1),
-                Metadata::MaxFraming => return Some(2),
-                // Preserve the existing adapter behavior for unmeasured shapes.
-                Metadata::Unknown => {}
-            }
+    if let Type::Character(character) = declared
+        && let Some(facts) = character_wire(&wire.type_info, wire.flags & 1 != 0)
+    {
+        match admission::metadata(*character, facts, target_nullable, target_max) {
+            Metadata::Admitted => return None,
+            Metadata::FamilyOrNullability => return Some(1),
+            Metadata::MaxFraming => return Some(2),
+            // Preserve the existing adapter behavior for unmeasured shapes.
+            Metadata::Unknown => {}
         }
     }
     let family = wire_family(&wire.type_info);
@@ -189,7 +195,8 @@ pub(super) fn declared_value(
     bytes: Option<&[u8]>,
 ) -> Result<Value> {
     let mut value = value(info, bytes)?;
-    if let Type::Character(character) = declared
+    if measured_character(info)
+        && let Type::Character(character) = declared
         && let Some(padding) = admission::padding_units(*character, bytes.map(<[u8]>::len))
     {
         match &mut value {
@@ -341,6 +348,61 @@ fn time(info: &TypeInfo, bytes: &[u8]) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsupported_shapes_and_legacy_ids_do_not_enable_new_padding() {
+        let declared = Type::Character(
+            msduck_core::character::CharacterType::new(
+                CharacterFamily::Char,
+                msduck_core::character::Length::Bounded(8),
+            )
+            .unwrap(),
+        );
+        for (id, format) in [
+            (
+                0x2f,
+                ValueFormat::ByteLen {
+                    max: 1,
+                    exact: false,
+                },
+            ),
+            (
+                0x27,
+                ValueFormat::ByteLen {
+                    max: 1,
+                    exact: false,
+                },
+            ),
+            (
+                0xaf,
+                ValueFormat::ShortLen {
+                    max: 0,
+                    unicode: false,
+                },
+            ),
+            (0xaf, ValueFormat::Plp { unicode: false }),
+            (
+                0xaf,
+                ValueFormat::ShortLen {
+                    max: 1,
+                    unicode: true,
+                },
+            ),
+        ] {
+            let info = TypeInfo {
+                id,
+                format,
+                precision: None,
+                scale: None,
+                collation: None,
+            };
+            assert!(!measured_character(&info));
+            assert_eq!(
+                declared_value(&info, &declared, Some(b"A")).unwrap(),
+                Value::Text("A".into())
+            );
+        }
+    }
 
     #[test]
     fn fixed_unicode_source_padding_preserves_isolated_units_and_null() {

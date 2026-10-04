@@ -168,6 +168,9 @@ impl Load {
                             let codec::Error::CharacterLength { column, bytes, .. } = decoder_error else {
                                 return None;
                             };
+                            if !wire::measured_character(&columns.get(column)?.type_info) {
+                                return None;
+                            }
                             let bound = self.plan.columns.get(column)?;
                             let Type::Character(character) = bound.declared else { return None; };
                             (msduck_core::bulk_character_admission::row(character, Some(bytes))
@@ -244,7 +247,8 @@ impl Load {
         let mut size = 0usize;
         for (index, (value, bound)) in row.iter().zip(&self.plan.columns).enumerate() {
             let original_size = value.bytes.as_ref().map_or(0, Vec::len);
-            if let msduck_core::types::Type::Character(character) = bound.declared
+            if wire::measured_character(&columns[index].type_info)
+                && let msduck_core::types::Type::Character(character) = bound.declared
                 && msduck_core::bulk_character_admission::row(
                     character,
                     value.bytes.as_ref().map(Vec::len),
@@ -884,6 +888,54 @@ mod admission_resource_tests {
     use super::*;
     use msduck_core::character::{CharacterType, Family, Length};
 
+    fn plan(declared: Type) -> Plan {
+        Plan {
+            table: "unused".into(),
+            schema: "unused".into(),
+            backend: "unused".into(),
+            target_columns: vec![TargetColumn {
+                name: "value".into(),
+                nullable: true,
+                identity: false,
+                computed: false,
+                max: false,
+                default: false,
+            }],
+            columns: vec![Bound {
+                target: 0,
+                declared,
+                declared_text: "unused".into(),
+            }],
+            options: Default::default(),
+        }
+    }
+
+    #[test]
+    fn legacy_wire_rows_keep_their_original_conversion_and_length_handling() {
+        for (id, family, source_width, wire_width, input) in [
+            (0x27, Family::Varchar, 1, 8u8, b"AA".as_slice()),
+            (0x2f, Family::Char, 8, 1u8, b"A".as_slice()),
+        ] {
+            let declared =
+                Type::Character(CharacterType::new(family, Length::Bounded(source_width)).unwrap());
+            let mut load = Load::new(plan(declared));
+            let mut metadata = vec![0x81, 1, 0];
+            metadata.extend(0u32.to_le_bytes());
+            metadata.extend(1u16.to_le_bytes());
+            metadata.extend([id, wire_width, 9, 4, 0xd0, 0, 0x34, 1, b'v', 0]);
+            load.decoder.push(&metadata, false).unwrap();
+            assert!(load.check(load.decoder.columns().unwrap()).is_none());
+            load.add(vec![codec::Value {
+                bytes: Some(input.to_vec()),
+            }])
+            .unwrap();
+            assert_eq!(
+                load.rows[0].values[0].value,
+                Value::Text(std::str::from_utf8(input).unwrap().into())
+            );
+        }
+    }
+
     #[test]
     fn buffering_accounts_for_fixed_source_expansion_and_physical_unicode_bytes() {
         for (family, width, id, wire_width, input, expected_size) in [
@@ -892,26 +944,7 @@ mod admission_resource_tests {
         ] {
             let declared =
                 Type::Character(CharacterType::new(family, Length::Bounded(width)).unwrap());
-            let plan = Plan {
-                table: "unused".into(),
-                schema: "unused".into(),
-                backend: "unused".into(),
-                target_columns: vec![TargetColumn {
-                    name: "value".into(),
-                    nullable: true,
-                    identity: false,
-                    computed: false,
-                    max: false,
-                    default: false,
-                }],
-                columns: vec![Bound {
-                    target: 0,
-                    declared,
-                    declared_text: "unused".into(),
-                }],
-                options: Default::default(),
-            };
-            let mut load = Load::new(plan);
+            let mut load = Load::new(plan(declared));
             let mut metadata = vec![0x81, 1, 0];
             metadata.extend(0u32.to_le_bytes());
             metadata.extend(1u16.to_le_bytes());
