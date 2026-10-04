@@ -114,9 +114,10 @@ export async function finalize(raw,output,compareRetained=true) {
  await save(raw,output,compareRetained)
 }
 export async function testRetention(output) {
+ await guardOutput(output);await guardOutput(output+'.comparison.json')
  const raw={runs:[{value:'a'.repeat(20*1024*1024)},{value:'b'.repeat(20*1024*1024)}]}
  assert.ok(jsonSize(raw)<CAPTURE_LIMIT)
- await assert.rejects(finalize(raw,output,false))
+ await assert.rejects(finalize(raw,output,false),{message:'bounded serialized capture'})
  assert.ok(!Object.hasOwn(raw,'comparisons'))
  assert.deepEqual(JSON.parse(await readCaptureFile(output)),raw)
  const sidecar=JSON.parse(await readCaptureFile(output+'.comparison.json'))
