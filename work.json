@@ -12081,6 +12081,28 @@
       ],
       "issue": 962,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pm01z"
+    },
+    {
+      "id": "isnull-subquery-binding-v1",
+      "title": "Avoid repeated ISNULL scalar-subquery binding with preserved SQL semantics",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatibility goal and first-party baseline native/client evidence. Unchanged approved main19ba8b82 and claimed OPENJSON PR964 both exceed the retained aggregate-subquery case5000ms deadline; diagnostic-only profiling5277ms returned its captured result. Inspect actual native timings before attributing cause; no third-party input. Reuse the existing root worktree/worker/cache, preserve separate engine reservations and canonical Linux lock.",
+      "issue": 965,
+      "scope": [
+        "src/scalar.rs",
+        "src/isnull.rs",
+        "tests/isnull_subquery_binding.rs",
+        "tests/compat/isnull_subquery.test.mjs",
+        "docs/isnull-subquery-binding.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Record native bind/execute timings and raw baseline for the retained concat isnull aggregate subquery query before fixing a demonstrated bottleneck. Preserve the original5000ms deadline, captured SQL Server result and allexisting controls. No skipped/normalized/known timeout expectation or weakened assertion.",
+        "Correct proven repeated scalar-subquery binding/evaluation in root ISNULL adapters. Keep typed declarations independent of values/rows and preserve NULL, replacement conversion/error priority, correlation/cardinality and outer aggregate scope. Evaluate volatile operands once and do not eagerly evaluate replacements; unsupported shapes remain explicit rather than silently replanned. Ground uncertain behaviors in owner-run SQL Server reference captures and preserve rawdifferences.",
+        "Add meaningful root native/client regressions for the implemented lowering, closed/correlated/NULL/empty/multirow and volatile/error controls. Do not edit engine.rs, deterministiccrate/metadata files or OPENJSON taskscopes; publish another bounded disjoint companion if evidence requires expansion.",
+        "Use existing root worktree and private new receipt; no additionalagents/worktrees/nativecachecopies. Exacthead fmt/strictworkspacealltargetsClippy/fullworkspaceRust/alltargetbuild/npm/manualnewclients/rawaudit, exactrequiredCI, independent/verifiedCodexreview or authorizedfallback, ownerworkermerge and registry/project/issuecompletion. KeepPRdraft until proof and gates pass."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pm5Yd"
     }
   ]
 }
