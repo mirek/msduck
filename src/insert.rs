@@ -238,8 +238,32 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
                 for ((item, unicode), ansi) in select.projection.iter_mut().zip(unicode).zip(ansi) {
                     if *unicode || *ansi {
                         match item {
-                            SelectItem::UnnamedExpr(value)
-                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
+                            SelectItem::UnnamedExpr(value) => {
+                                // Packing changes the backend expression name. Retain a
+                                // declared source label for query-level set ORDER BY.
+                                let mut source = &*value;
+                                while let Expr::Nested(inner) = source {
+                                    source = inner;
+                                }
+                                let alias = match source {
+                                    Expr::Identifier(id)
+                                        if id.quote_style.is_some()
+                                            || !id.value.starts_with('@') =>
+                                    {
+                                        Some(id.clone())
+                                    }
+                                    Expr::CompoundIdentifier(ids) => ids.last().cloned(),
+                                    _ => None,
+                                };
+                                pack(value);
+                                if let Some(alias) = alias {
+                                    *item = SelectItem::ExprWithAlias {
+                                        expr: value.clone(),
+                                        alias,
+                                    };
+                                }
+                            }
+                            SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
                             _ => unreachable!(),
                         }
                     }
