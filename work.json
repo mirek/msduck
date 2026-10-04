@@ -12160,6 +12160,24 @@
       "dependencies": [],
       "issue": 968,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pm-Wp"
+    },
+    {
+      "id": "stored-default-duckdb-dialect-v1",
+      "title": "Parse backend-stored INSERT defaults with the DuckDB dialect",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatibility goal. Exact-head PR964 full Rust gate and an owner-run native probe reproduce the unchanged conditional SESSION_CONTEXT stored-default INSERT parser failure. Identical DuckDB serialized default is rejected by GenericDialect and accepted by DuckDbDialect. First-party evidence only; reuse the existing root worker/worktree/cache and Linux lock, no engine edits.",
+      "scope": [
+        "src/insert.rs",
+        "tests/stored_default_dialect.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Use the backend dialect for reparsing persisted defaults in omitted columns and explicit DEFAULT values. Preserve the user SQL parser, bound values, carrier storage, width rules and statement behavior; do not strip STRUCT types or downgrade Unicode carriers.",
+        "Preserve the unchanged conditional_session_context_defaults_follow_the_stored_base_type test and run the complete gaps_computed file. Add meaningful INSERT default regressions with backend STRUCT defaults and raw isolated UTF16 units, covering omitted and explicit DEFAULT paths; demonstrate predecessor failure.",
+        "Same root worker/worktree/cache/private receipt; combine with PR964 and run frozen fmt/strict workspace all-target Clippy/full workspace Rust/all-target build/default npm/manual clients/raw audit, required CI and exact-head review/fallback, then merge and complete registry/issues/project."
+      ],
+      "issue": 970,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnBxY"
     }
   ]
 }
