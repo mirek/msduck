@@ -12060,6 +12060,27 @@
       ],
       "issue": 960,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmt7q"
+    },
+    {
+      "id": "remote-owned-tmpdir-v1",
+      "title": "Keep remote build temporary files in the owned workspace",
+      "state": "ready",
+      "authorization": "The owner authorized continuing first-party server work, reliable use of linux.local, faster contribution cycles, and disk-conscious parallel work. On 2026-10-04, exact-head PR #961 verification failed at native linking because Linux /tmp had 1,048,576/1,048,576 inodes used while still having 54GiB free. The same frozen source passes linking and the new native regressions with a task-owned TMPDIR under the existing canonical runner.lock. The regular remote runner does not configure TMPDIR. This bounded companion fixes the demonstrated infrastructure failure without modifying the current IDENTITY claim or live engine reservation. Reuse an existing completed worker/worktree; add no agents, worktrees or native cache copies.",
+      "scope": [
+        "scripts/remote-build.mjs",
+        "tests/remote-build.test.mjs",
+        ".env.example",
+        "docs/remote-build.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Ensure remote actions create temporary files in a dedicated directory associated with the owned build workspace, instead of relying on shared /tmp. Provide sensible defaults and, if useful, a validated .env override. Configuration remains data with safe shell quoting; do not expose secrets. Preserve ownership guards, no-symlink policy, existing toolchain/client settings, cache reuse and the single runner.lock spanning sync and execution.",
+        "Never delete unrelated shared temporary files or migrate/copy native caches. Do not recursively delete arbitrary configuration paths. Keep the temporary directory bounded to a known owned location and document retention/cleanup behavior. A full or inode-exhausted shared /tmp must not prevent the runner from using its healthy owned directory.",
+        "Add meaningful runner tests that execute the emitted shell/configuration through isolated fixtures: effective TMPDIR and actual temporary-file creation, override/path validation, missing ownership or symlink rejection, command/shell injection refusal and intact lock sequencing. Preserve existing migration, npm-cache and client-concurrency tests. Use node tests and a lightweight Linux smoke if necessary; do not start canonical native builds or synchronize beneath PR #961 verification.",
+        "Change only scripts/remote-build.mjs, tests/remote-build.test.mjs, .env.example and docs/remote-build.md. Reuse the completed worker tree and acquire a new private receipt before edits. Push a focused PR linking the task, obtain exact-head required CI and owner-enabled review/fallback, address findings, merge and publish completion. Report revision-specific checks; this is a remote-runner change, not SQL compatibility completion."
+      ],
+      "issue": 962,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pm01z"
     }
   ]
 }
