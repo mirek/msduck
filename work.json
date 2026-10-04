@@ -11710,7 +11710,7 @@
     {
       "id": "ansi-native-capacity-adapter-v1",
       "title": "Apply BulkLoad capacity through the native ANSI DuckDB bridge",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server compatibility goal; owner-captured capacity899/conversion895/trailing909 and completed capacity914/921 plus real native projection adapters932/936 establish explicit next missing effect bridge. No external input approved. Runtime engine/Value/catalog/wire work remains separately coordinated.",
       "scope": [
         "src/ansi_carrier/projection.rs",
