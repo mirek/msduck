@@ -993,3 +993,183 @@ test('direct OPENJSON sets preserve captured UTF-16 units and nested type bounda
     assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
   }
 })
+
+// Pinned SQL Server 17.0.4065.4: BIN2 keys and input-derived value/WITH collations.
+const sourceCollationCases = [
+  {
+    "name": "key binary equality",
+    "query": "SELECT j.[key] FROM OPENJSON(N'{\"A\":1,\"a\":2}') j WHERE j.[key]=N'a' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ]
+          ],
+          "rows": [
+            [
+              "a"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "value explicit case sensitivity",
+    "query": "SELECT j.[key],j.value FROM OPENJSON(N'{\"a\":\"x\",\"b\":\"X\"}' COLLATE Latin1_General_100_CS_AS) j WHERE j.value=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ],
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "a",
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "with explicit comparison",
+    "query": "SELECT j.v FROM OPENJSON(N'[{\"v\":\"x\"},{\"v\":\"X\"}]' COLLATE Latin1_General_100_CS_AS) WITH(v NVARCHAR(2)) j WHERE j.v=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "stored input",
+    "query": "CREATE TABLE input_json(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT input_json VALUES(N'{\"a\":\"x\",\"b\":\"X\"}'); SELECT j.value FROM input_json s CROSS APPLY OPENJSON(s.doc) j WHERE j.value=N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "key order",
+    "query": "SELECT j.[key] FROM OPENJSON(N'{\"a\":1,\"A\":2}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ]
+          ],
+          "rows": [
+            [
+              "A"
+            ],
+            [
+              "a"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "chained stored input",
+    "query": "CREATE TABLE chained_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT chained_input VALUES(N'[\"[\\\"x\\\",\\\"X\\\"]\"]'); SELECT k.value FROM chained_input d CROSS APPLY OPENJSON(d.doc) j CROSS APPLY OPENJSON(j.value) k WHERE k.value=N'x';",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        1,
+        1
+      ]
+    }
+  }
+]
+
+test('OPENJSON predicates and ordering follow declared source collations', async t => {
+  const connection = await start(t)
+  for (const entry of sourceCollationCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})

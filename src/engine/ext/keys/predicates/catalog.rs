@@ -181,12 +181,15 @@ struct Relations {
     defined: HashSet<String>,
     /// OPENJSON row sources, by a name no relation can have.
     openjson: HashMap<String, HashMap<String, Column>>,
+    /// FROM/APPLY order: each lateral source inherits only after its predecessors.
+    /// One pass bounds work and never attempts to solve invalid cyclic references.
+    openjson_inputs: Vec<(String, Expr, bool)>,
 }
 
 /// The columns of an OPENJSON row source: the default schema's key
 /// (NVARCHAR(4000)), value (NVARCHAR(MAX)) and type, or the declared WITH
 /// columns, whose NVARCHAR and NCHAR values are carriers.
-fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> {
+fn openjson_columns(columns: &[OpenJsonTableColumn], input: &Expr) -> HashMap<String, Column> {
     let column = |declared: DataType| {
         let family = match msduck_sql::sql_type::declaration(&declared) {
             Ok(msduck_core::types::Type::Character(kind)) => Some(kind.family()),
@@ -206,8 +209,40 @@ fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> 
     };
     msduck_sql::expression_metadata::openjson::columns(columns)
         .into_iter()
-        .filter_map(|(name, declared)| declared.map(|kind| (name.to_lowercase(), column(kind))))
+        .filter_map(|(name, declared)| {
+            declared.map(|kind| {
+                let name = name.to_lowercase();
+                let mut column = column(kind);
+                if column.text {
+                    column.collation = if columns.is_empty() && name == "key" {
+                        Some("Latin1_General_BIN2".into())
+                    } else {
+                        source_collation(None, input)
+                    };
+                }
+                (name, column)
+            })
+        })
         .collect()
+}
+
+/// Character casts preserve the input collation; an explicit COLLATE wins.
+/// Column inheritance uses declaration facts in the completed source scope,
+/// never the JSON text or result values.
+fn source_collation(catalog: Option<&Catalog>, input: &Expr) -> Option<String> {
+    match input {
+        Expr::Collate { collation, .. } => Some(match collation.0.as_slice() {
+            [ObjectNamePart::Identifier(name)] => name.value.clone(),
+            _ => collation.to_string(),
+        }),
+        Expr::Nested(inner)
+        | Expr::Cast { expr: inner, .. }
+        | Expr::Convert { expr: inner, .. } => source_collation(catalog, inner),
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog
+            .and_then(|catalog| catalog.collation(input))
+            .map(str::to_owned),
+        _ => None,
+    }
 }
 
 impl Relations {
@@ -290,7 +325,13 @@ impl Visitor for Relations {
                     .insert(DERIVED.into());
             }
         }
-        if let TableFactor::OpenJsonTable { columns, alias, .. } = factor {
+        if let TableFactor::OpenJsonTable {
+            columns,
+            alias,
+            json_expr,
+            ..
+        } = factor
+        {
             // WITH names are source columns, not projection/derived aliases.
             // A column list in the alias renames the columns: unknown here.
             let renamed = alias.as_ref().is_some_and(|a| !a.columns.is_empty());
@@ -304,7 +345,10 @@ impl Visitor for Relations {
                     name.clone()
                 });
             if !renamed {
-                self.openjson.insert(name, openjson_columns(columns));
+                self.openjson_inputs
+                    .push((name.clone(), json_expr.clone(), columns.is_empty()));
+                self.openjson
+                    .insert(name, openjson_columns(columns, json_expr));
             }
         }
         if let TableFactor::Table {
@@ -388,6 +432,19 @@ impl Catalog {
             unknown_columns,
             ctes: HashMap::new(),
         });
+        for (name, input, default_schema) in relations.openjson_inputs {
+            let collation = source_collation(Some(&catalog), &input);
+            let Some(scoped) = renamed.get(&name) else {
+                continue;
+            };
+            if let Some(columns) = catalog.tables.get_mut(scoped) {
+                for (name, column) in columns {
+                    if column.text && !(default_schema && name == "key") {
+                        column.collation = collation.clone();
+                    }
+                }
+            }
+        }
         catalog
     }
 
@@ -769,6 +826,58 @@ mod tests {
             defined: relations.defined,
             names: relations.names,
             scopes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn openjson_collations_follow_declared_input_without_reading_values() {
+        let catalog =
+            catalog("SELECT j.value FROM OPENJSON(@doc COLLATE [Latin1_General_100_CS_AS]) j");
+        assert_eq!(
+            catalog.collation(&qualified("j", "key")),
+            Some("Latin1_General_BIN2")
+        );
+        assert_eq!(
+            catalog.collation(&qualified("j", "value")),
+            Some("Latin1_General_100_CS_AS")
+        );
+        let catalog = self::catalog(
+            "SELECT j.v FROM OPENJSON(@doc COLLATE Latin1_General_100_CS_AS) WITH(v NVARCHAR(2)) j",
+        );
+        assert_eq!(
+            catalog.collation(&qualified("j", "v")),
+            Some("Latin1_General_100_CS_AS")
+        );
+    }
+
+    #[test]
+    fn chained_openjson_sources_inherit_in_from_order() {
+        // Reverse alias spelling rules out accidentally sorting the aliases.
+        for aliases in [("z", "a", "m"), ("a", "z", "m")] {
+            let (first, second, third) = aliases;
+            let sql = format!(
+                "SELECT {third}.value FROM OPENJSON(@doc COLLATE Latin1_General_100_CS_AS) {first} \
+                 CROSS APPLY OPENJSON({first}.value) {second} \
+                 CROSS APPLY OPENJSON({second}.value) {third}"
+            );
+            let statement = Parser::parse_sql(&MsSqlDialect {}, &sql).unwrap().remove(0);
+            let Statement::Query(query) = statement else {
+                panic!("expected query")
+            };
+            let SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("expected select")
+            };
+            let scoped = catalog(&sql).select_scope(select);
+            for alias in [first, second, third] {
+                assert_eq!(
+                    scoped.collation(&qualified(alias, "value")),
+                    Some("Latin1_General_100_CS_AS")
+                );
+                assert_eq!(
+                    scoped.collation(&qualified(alias, "key")),
+                    Some("Latin1_General_BIN2")
+                );
+            }
         }
     }
 

@@ -997,3 +997,52 @@ fn direct_openjson_set_branches_preserve_units_and_binary_type_boundaries() {
         .unwrap();
     assert_eq!(rows, vec![1, 1, 7]);
 }
+
+#[test]
+fn openjson_key_and_input_collations_control_predicates() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE binary_json_key(v NVARCHAR(4000)); INSERT binary_json_key SELECT j.[key] FROM OPENJSON(N'{"A":1,"a":2}') j WHERE j.[key]=N'a';"#,
+    );
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM binary_json_key")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![vec![b'a', 0]]);
+    batch(
+        &mut session,
+        r#"CREATE TABLE input_json(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT input_json VALUES(N'{"a":"x","b":"X"}'); CREATE TABLE inherited_json_value(v NVARCHAR(MAX)); INSERT inherited_json_value SELECT j.value FROM input_json s CROSS APPLY OPENJSON(s.doc) j WHERE j.value=N'x';"#,
+    );
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM inherited_json_value")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![vec![b'x', 0]]);
+}
+
+#[test]
+fn chained_openjson_values_inherit_physical_input_collation() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE chained_input(doc NVARCHAR(MAX) COLLATE Latin1_General_100_CS_AS); INSERT chained_input VALUES(N'["[\"x\",\"X\"]"]'); CREATE TABLE chained_output(v NVARCHAR(MAX)); INSERT chained_output SELECT k.value FROM chained_input d CROSS APPLY OPENJSON(d.doc) j CROSS APPLY OPENJSON(j.value) k WHERE k.value=N'x';"#,
+    );
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM chained_output")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![vec![b'x', 0]]);
+}

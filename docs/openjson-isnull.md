@@ -194,3 +194,20 @@ before a parent numeric conversion. Six additional pinned SQL Server captures
 check unpaired UTF-16 payloads, bounded result widths, ISNULL fallback rows,
 case/trailing-space equality and the nested numeric boundary. Unknown outputs
 and numeric expressions do not gain a character declaration from provenance.
+
+
+### OPENJSON source collations
+
+Default-schema keys carry Latin1_General_BIN2 independently of the input.
+Default-schema values and character WITH columns inherit an explicit input
+COLLATE or a resolved physical/source column declaration. Inheritance follows
+FROM/APPLY order, so a chained OPENJSON source sees its predecessor's completed
+collation rather than depending on hash-map iteration. It uses declaration
+facts only; unknown expressions and ambiguous references remain unresolved.
+
+Six additional pinned SQL Server 17.0.4065.4 captures cover key case-sensitive
+equality and binary ordering, explicit value/WITH comparisons, stored input
+collation and a two-stage lateral chain. The client replay retains full rows,
+descriptor names/types/lengths, errors and completion counts. Separate raw
+SQL_VARIANT_PROPERTY captures establish the input-derived labels; these checks
+do not establish complete wire collation metadata or nondefault set parity.
