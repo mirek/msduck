@@ -12278,6 +12278,36 @@
         "Activate/claim only after dependencies done under exclusive protocol. Reuse an existing build workspace and respect its lock; frozen fmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/reviews, then worker owns merge and registry/issue/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnZzE"
+    },
+    {
+      "id": "isnull-declared-replacement-conversion-v1",
+      "title": "Convert ISNULL non-text replacements with declared SQL character rules",
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB goal. First-party pinned SQLServer17.0.4065.4 and stable68338fe executable captures in ownerissue976 quantify existing documented ISNULL typed replacement/width gaps; DATE/TIME/DECIMAL controls retain matches. No externalcontent. Publish backlog only, dependent on current PR964 claimed files, reuse existing Linux lock/cache, no engine.rs/newworkers/trees/caches.",
+      "issue": 976,
+      "scope": [
+        "src/isnull.rs",
+        "src/scalar.rs",
+        "src/concat_lower.rs",
+        "tests/isnull_replacement_conversion.rs",
+        "tests/compat/isnull_replacement_conversion.test.mjs",
+        "scripts/capture-isnull-replacement-conversion.mjs",
+        "reference/isnull-replacement-conversion.json",
+        "docs/isnull-replacement-conversion.md"
+      ],
+      "dependencies": [
+        "v025-openjson-catalog-v1",
+        "isnull-subquery-binding-v1",
+        "openjson-isnull-carrier-pinning-v1",
+        "isnull-carrier-adapters-v1"
+      ],
+      "acceptance": [
+        "Retain all nine complete raw owner captures in reproducible generator/fixture with pinned SQLServer image/version. Reproduce BIT true/1, DATETIME default style, DATETIME2 native shape error, uppercase GUID, bounded first NVARCHAR overflow and scalar NV2 tr/1. Preserve matching DATE/TIME/DECIMAL controls, descriptors/rawUTF16/errors/completions without case, space or numeric normalization.",
+        "Use explicit declared replacement/first-result types to apply SQLServer character conversion before carrier packing and declared-width enforcement. Do not inspect parameter values for compile metadata, stringify arbitrary STRUCTs or broaden unrelated conditional precedence. Cover direct OPENJSON, bounded WITH sources, variables/physical character columns and scalar-query first operands. Keep deterministic decisions dependent only on explicit inputs, effects root-side.",
+        "Keep first and selected replacement evaluation once; NULL/lazy replacement, volatile/error controls, fixed/bounded/MAX capacity, raw isolated UTF16 and numeric/unknown fallback behavior must remain exact. Add native/public regressions showing actual predecessor failures, with typed parameter and bounded-width controls. Do not edit engine.rs or shared currently-reserved files; publish companions if a shared adapter becomes necessary.",
+        "Activate and claim only after dependencies done; no extra build caches and respect canonical Linux lock. Exact frozen fmt/strictworkspacealltargetClippy/workspaceRust/alltargetbuild/defaultnpm/rawaudit/requiredCI/independent and Codexreview or verifiedavailabilityfallback; worker owns PRfollowup/merge and completion of registry/issue/project."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PneGG"
     }
   ]
 }
