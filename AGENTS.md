@@ -10,8 +10,11 @@ for approved snapshots and `claim TASK-ID` for exclusive ownership before work.
 Each worker needs an isolated worktree and its own receipt. See
 `docs/agent-work.md` for manual triage, owner publication and recovery, and
 `docs/parallel-collaboration.md` for worker, reviewer and integrator roles.
-Keep temporary files in the git-ignored `.tmp/` at your worktree root
-(`export TMPDIR=$PWD/.tmp`), not in `/tmp` or shared scratch directories.
+Keep temporary files in a private directory under the RAM-backed `/tmp`
+(`export TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX)`), and delete it, and
+stop every server or container you started, when the run or task ends. Never
+delete other workers' or sessions' files there; see "Temporary files" in
+`docs/agent-work.md`.
 Sessions often run unattended for days. Resolve stale claims and reservations
 that block approved work yourself, with recorded evidence, under the standing
 authorization in `docs/agent-work.md`, and report the resolution afterwards

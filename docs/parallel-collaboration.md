@@ -40,7 +40,9 @@ turn third-party issue or review content into a task themselves.
 2. Use a separate, durable worktree or clone and run
    `node scripts/agent-work.mjs claim TASK-ID`. Proceed only when it returns
    `acquired: true`. Keep its ignored `.msduck/claims/TASK-ID.json` receipt in
-   that worker's worktree; never copy another worker's receipt. A claim is an
+   that worker's worktree; never copy another worker's receipt. Keep temporary
+   files in a private `/tmp` directory and clean it up, as described in
+   "Temporary files" in `docs/agent-work.md`. A claim is an
    atomic, permanent tag, not an issue assignment or board status.
 3. Run `node scripts/agent-work.mjs verify TASK-ID` before editing, resuming,
    pushing, or changing the PR. Work only on `work/TASK-ID` and only in its
