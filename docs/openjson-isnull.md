@@ -162,8 +162,25 @@ source conversion. Full-width NCHAR source controls avoid this separate gap.
 
 The additional set tests retain complete rows rather than trimming values to
 force equality. Distinct character sets compare keys and select an unchanged
-payload, preferring the shorter binary prefix for equal trailing-space keys.
+payload from the first branch when default character keys compare equal;
+within that branch, the binary key resolves remaining representation ties.
 Membership wrappers name their generated CTE output columns explicitly and
 avoid referenced user relation names. Nested distinct operators retain their
 own equality behavior beneath UNION ALL; parenthesized ANSI literals retain
 their full best-fit width.
+
+### Scalar character predicate declarations
+
+Scalar-first ISNULL with a declared NVARCHAR/NCHAR result uses character keys
+for comparisons, IN and BETWEEN, and the Unicode matcher for LIKE, when
+all peers have character declarations or are NULL. Physical VARCHAR peers and
+bare character parameters retain case and trailing-space comparison semantics.
+Quoted `[@p]` names remain columns, independently of bare parameter declarations.
+Numeric and unresolved peers retain the numeric coercion path; COALESCE is
+proved character only when every non-NULL result operand is character.
+
+Ten additional raw SQL Server 17.0.4065.4 captures cover these predicates,
+three-valued NULL membership, declaration-based ORDER BY scope, numeric
+precedence, quoted columns and IF membership. Client replay compares captured
+rows, descriptor names/types/lengths, errors and completion counts. These
+focused cases do not establish full SQL Server compatibility.

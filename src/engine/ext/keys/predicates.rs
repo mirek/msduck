@@ -108,7 +108,12 @@ fn rewrite<T: Visit + VisitMut + 'static>(
         && (node as &dyn std::any::Any)
             .downcast_ref::<Statement>()
             .is_some_and(group::sites);
-    if !catalog.has_carriers() && !catalog.has_collations() && !likes(node) && !grouped {
+    if !catalog.has_carriers()
+        && !catalog.has_collations()
+        && !likes(node)
+        && !grouped
+        && !pin::sites(node)
+    {
         return Ok(());
     }
     mark::rewrite(&catalog, parameters, node)?;

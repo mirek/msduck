@@ -953,3 +953,21 @@ fn query_ordering_alternatives_retain_select_carrier_scope() {
         assert_eq!(count, 1);
     }
 }
+
+#[test]
+fn order_predicates_use_select_sources_and_declared_parameter_peers() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"DECLARE @p NVARCHAR(2)=N'x '; CREATE TABLE order_predicate(v NVARCHAR(MAX)); INSERT order_predicate SELECT j.value FROM OPENJSON(N'["z","x"]') j ORDER BY CASE WHEN j.value=@p THEN 0 ELSE 1 END;"#,
+    );
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM order_predicate")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![vec![b'x', 0], vec![b'z', 0]]);
+}

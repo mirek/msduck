@@ -419,37 +419,25 @@ fn dispatched(operands: &[&Expr]) -> bool {
             .any(|o| has_subquery(o) || collated(o) || is_typeof(o) || lowered(o))
 }
 
-/// The rewrite of one comparison, or `None` when it needs none.
-fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
-    // Width adapters return Unicode but may contain a scalar query. For
-    // text peers, key each operand once without duplicating that query in a
-    // typeof CASE. Numeric/unknown peers retain the old backend coercion
-    // through text; passing an integer to a Unicode key would reject it.
-    let unicode_width = |value: &Expr| {
-        function_name(value).is_some_and(|name| {
-            matches!(
-                name.as_str(),
-                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
-            )
-        })
-    };
-    fn text_peer(value: &Expr) -> bool {
-        match value {
-            Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => text_peer(inner),
-            Expr::Value(v) => matches!(
-                v.value,
-                Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
-            ),
-            Expr::Cast { data_type, .. } => {
-                matches!(data_type, DataType::Text | DataType::String(_))
-                    || matches!(
-                        msduck_sql::sql_type::declaration(data_type),
-                        Ok(msduck_core::types::Type::Character(_))
-                    )
-            }
-            Expr::Function(f) => matches!(
-                f.name.to_string().as_str(),
-                MARK | TEXT
+/// A declaration-backed character producer after bottom-up lowering.
+/// Generic marker names and runtime values do not establish a declaration.
+pub(super) fn text_peer(value: &Expr) -> bool {
+    match value {
+        Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => text_peer(inner),
+        Expr::Value(v) => matches!(
+            v.value,
+            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
+        ),
+        Expr::Cast { data_type, .. } => {
+            matches!(data_type, DataType::Text | DataType::String(_))
+                || matches!(
+                    msduck_sql::sql_type::declaration(data_type),
+                    Ok(msduck_core::types::Type::Character(_))
+                )
+        }
+        Expr::Function(f) => matches!(
+            f.name.to_string().as_str(),
+            MARK | TEXT
                     | INPUT
                     | OPERAND
                     | CARRIER_INPUT
@@ -474,12 +462,26 @@ fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
                     | "__msduck_nvarchar_width"
                     | "__msduck_char_width"
                     | "__msduck_varchar_width"
-            ),
-            // MAYBE and generic names containing "unicode" are not type
-            // declarations: e.g. __msduck_unicode itself returns an integer.
-            _ => false,
-        }
+        ),
+        // MAYBE and generic names containing "unicode" are not type
+        // declarations: e.g. __msduck_unicode itself returns an integer.
+        _ => false,
     }
+}
+/// The rewrite of one comparison, or `None` when it needs none.
+fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
+    // Width adapters return Unicode but may contain a scalar query. For
+    // text peers, key each operand once without duplicating that query in a
+    // typeof CASE. Numeric/unknown peers retain the old backend coercion
+    // through text; passing an integer to a Unicode key would reject it.
+    let unicode_width = |value: &Expr| {
+        function_name(value).is_some_and(|name| {
+            matches!(
+                name.as_str(),
+                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+            )
+        })
+    };
     let width_text =
         unicode_width(left) && text_peer(right) || unicode_width(right) && text_peer(left);
     if comparison(op) && (marked(left) || marked(right) || width_text) {

@@ -364,3 +364,93 @@ fn scalar_isnull_width_comparisons_key_all_character_cast_families() {
         assert_eq!(hit, 1, "{kind}");
     }
 }
+
+#[test]
+fn scalar_isnull_character_predicates_preserve_padding_and_null_membership() {
+    let (_server, mut session) = session();
+    for (index, predicate) in [
+        "ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') LIKE N'x'",
+        "ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') IN (N'x ',NULL)",
+        "ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') BETWEEN N'w' AND N'x '",
+    ]
+    .iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                "SELECT CASE WHEN {predicate} THEN 1 ELSE 0 END AS v INTO scalar_predicate_{index}"
+            ),
+        );
+        let hit: i32 = session
+            .db
+            .query_row(
+                &format!("SELECT v FROM scalar_predicate_{index}"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hit, 1, "{predicate}");
+    }
+    batch(
+        &mut session,
+        "CREATE TABLE declared_peer(v VARCHAR(2)); INSERT declared_peer VALUES('x '); SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=v THEN 1 ELSE 0 END AS hit INTO scalar_declared_peer FROM declared_peer",
+    );
+    let hit: i32 = session
+        .db
+        .query_row("SELECT hit FROM scalar_declared_peer", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(hit, 1);
+    batch(
+        &mut session,
+        "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'z') NOT IN (N'x',NULL) THEN 1 WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'z') IN (N'x',NULL) THEN 2 ELSE 3 END AS hit INTO scalar_null_membership",
+    );
+    let hit: i32 = session
+        .db
+        .query_row("SELECT hit FROM scalar_null_membership", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(hit, 3);
+}
+
+#[test]
+fn scalar_character_gate_retains_coalesce_numeric_precedence_and_quoted_columns() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'02')=COALESCE(N'2',2) THEN 1 ELSE 0 END AS hit INTO scalar_numeric_coalesce",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM scalar_numeric_coalesce", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+    batch(
+        &mut session,
+        "DECLARE @p INT=2; CREATE TABLE quoted_peer([@p] VARCHAR(2)); INSERT quoted_peer VALUES('x '); SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=[@p] THEN 1 ELSE 0 END AS hit INTO scalar_quoted_peer FROM quoted_peer",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM scalar_quoted_peer", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn scalar_character_predicates_in_control_flow_do_not_require_statement_catalogs() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        "DECLARE @hit INT=0; IF ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') IN (N'x ',NULL) SET @hit=1; SELECT @hit AS hit INTO scalar_if_membership",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM scalar_if_membership", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+}

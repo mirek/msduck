@@ -158,3 +158,296 @@ test('ISNULL scalar-query comparisons retain captured character peer equality', 
     assert.deepEqual(actual, entry.expected, entry.name)
   }
 })
+
+// Captured on pinned SQL Server 17.0.4065.4; raw evidence retained privately.
+const declaredPredicateCases = [
+  {
+    "name": "order scope",
+    "query": "SELECT j.value FROM OPENJSON(N'[\"x\"]') j ORDER BY CASE WHEN j.value=N'x' THEN 0 ELSE 1 END",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "scalar like",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') LIKE N'x' THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "scalar list",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') IN (N'x ',NULL) THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "scalar range",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') BETWEEN N'w' AND N'x ' THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "varchar peer",
+    "query": "CREATE TABLE predicate_peer(v VARCHAR(2)); INSERT INTO predicate_peer VALUES('x '); SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=v THEN 1 ELSE 0 END AS v FROM predicate_peer",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "parameter peer",
+    "query": "DECLARE @p VARCHAR(2)='x '; SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=@p THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1,
+        1
+      ]
+    }
+  }
+]
+
+declaredPredicateCases.push(...[
+  {
+    "name": "order parameter",
+    "query": "DECLARE @p NVARCHAR(2)=N'x '; SELECT j.value FROM OPENJSON(N'[\"z\",\"x\"]') j ORDER BY CASE WHEN j.value=@p THEN 0 ELSE 1 END",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ],
+            [
+              "z"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1,
+        2
+      ]
+    }
+  },
+  {
+    "name": "numeric coalesce",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'02')=COALESCE(N'2',2) THEN 1 ELSE 0 END AS hit",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "hit",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "quoted parameter column",
+    "query": "DECLARE @p INT=2; CREATE TABLE quoted_peer([@p] VARCHAR(2)); INSERT quoted_peer VALUES('x '); SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x')=[@p] THEN 1 ELSE 0 END AS hit FROM quoted_peer",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "hit",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1,
+        null,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "control flow membership",
+    "query": "DECLARE @hit INT=0; IF ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') IN (N'x ',NULL) SET @hit=1; SELECT @hit AS hit",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "hit",
+              "IntN",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1,
+        null,
+        1,
+        1
+      ]
+    }
+  }
+])
+
+test('declared scalar character predicates match captured SQL Server results', async t => {
+  const connection = await start(t)
+  for (const entry of declaredPredicateCases) {
+    const raw = await capture(connection, entry.query)
+    const actual = canonical({
+      sets: raw.sets.map(set => ({columns: set.columns.map(c => [c.name,c.type,c.length]), rows:set.rows})),
+      errors: raw.errors,
+      done: raw.done.filter(d => d.kind === 'done' || d.kind === 'doneInProc').map(d => d.rowCount),
+    })
+    assert.deepEqual(actual, entry.expected, entry.name)
+  }
+})

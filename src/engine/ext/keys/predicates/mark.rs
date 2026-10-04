@@ -34,7 +34,9 @@ fn not_text(catalog: &Catalog, expr: &Expr) -> bool {
         Expr::Nested(inner) => not_text(catalog, inner),
         Expr::Value(value) => matches!(value.value, Value::Number(..)),
         Expr::UnaryOp { expr, .. } => not_text(catalog, expr),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            false
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
             matches!(catalog.resolve(expr), Resolution::Plain { text: false })
         }
@@ -49,7 +51,9 @@ fn unknown(catalog: &Catalog, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => unknown(catalog, inner),
         // Variables and parameters are VARCHAR text in the backend.
-        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            false
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
             matches!(catalog.resolve(expr), Resolution::Unknown)
         }
@@ -262,21 +266,30 @@ fn own_collation<'a>(catalog: &'a Catalog, expr: &Expr) -> Option<&'a str> {
 /// literal, a character variable or parameter, or a character function or
 /// conversion of such text.
 fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    text_at(catalog, parameters, expr, 64)
+}
+
+fn text_at(catalog: &Catalog, parameters: &Parameters, expr: &Expr, depth: usize) -> bool {
+    if depth == 0 {
+        return false;
+    }
     use msduck_core::types::Type;
     match expr {
-        Expr::Nested(inner) => text(catalog, parameters, inner),
+        Expr::Nested(inner) => text_at(catalog, parameters, inner, depth - 1),
         Expr::Value(value) => matches!(
             value.value,
             Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
         ),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
-            .get(&ident.value.to_lowercase())
-            .is_some_and(|parameter| {
-                matches!(
-                    parameter.data_type,
-                    Type::Character(_) | Type::Text | Type::Ntext
-                )
-            }),
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            parameters
+                .get(&ident.value.to_lowercase())
+                .is_some_and(|parameter| {
+                    matches!(
+                        parameter.data_type,
+                        Type::Character(_) | Type::Text | Type::Ntext
+                    )
+                })
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.textual(expr),
         Expr::Cast { data_type, .. }
         | Expr::Convert {
@@ -288,8 +301,38 @@ fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
                 Ok(Type::Character(_) | Type::Text | Type::Ntext)
             )
         }
+        Expr::Subquery(query) => match query.body.as_ref() {
+            SetExpr::Select(select) => match select.projection.as_slice() {
+                [SelectItem::UnnamedExpr(p) | SelectItem::ExprWithAlias { expr: p, .. }] => {
+                    let scope = catalog.query_scope(query).select_scope(select);
+                    text_at(&scope, parameters, p, depth - 1)
+                }
+                _ => false,
+            },
+            _ => false,
+        },
+        Expr::Function(_) if super::lower::text_peer(expr) => true,
         Expr::Function(f) => {
             let name = f.name.to_string().to_ascii_uppercase();
+            if name == "COALESCE" {
+                let FunctionArguments::List(list) = &f.args else {
+                    return false;
+                };
+                let mut character = false;
+                for arg in &list.args {
+                    let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = arg else {
+                        return false;
+                    };
+                    if matches!(value, Expr::Value(v) if v.value == Value::Null) {
+                        continue;
+                    }
+                    if !text_at(catalog, parameters, value, depth - 1) {
+                        return false;
+                    }
+                    character = true;
+                }
+                return character;
+            }
             name == "CONCAT"
                 || matches!(
                     name.as_str(),
@@ -304,8 +347,8 @@ fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
                         | "REPLACE"
                         | "REVERSE"
                         | "ISNULL"
-                        | "COALESCE"
-                ) && first_argument(f).is_some_and(|a| text(catalog, parameters, a))
+                ) && first_argument(f)
+                    .is_some_and(|a| text_at(catalog, parameters, a, depth - 1))
         }
         _ => unicode(catalog, expr),
     }
@@ -319,13 +362,15 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => ansi(catalog, parameters, inner),
         Expr::Value(value) => matches!(value.value, Value::SingleQuotedString(_)),
-        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
-            .get(&ident.value.to_lowercase())
-            .is_some_and(|parameter| {
-                matches!(parameter.data_type, Type::Text)
-                    || matches!(parameter.data_type, Type::Character(c)
+        Expr::Identifier(ident) if ident.quote_style.is_none() && ident.value.starts_with('@') => {
+            parameters
+                .get(&ident.value.to_lowercase())
+                .is_some_and(|parameter| {
+                    matches!(parameter.data_type, Type::Text)
+                        || matches!(parameter.data_type, Type::Character(c)
                         if matches!(c.family(), Family::Char | Family::Varchar))
-            }),
+                })
+        }
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.ansi(expr),
         _ => false,
     }
@@ -351,7 +396,7 @@ fn ansi_keyed(expr: &Expr) -> bool {
 /// handling.
 fn mark(
     catalog: &Catalog,
-    _parameters: &Parameters,
+    parameters: &Parameters,
     operation: &str,
     mut operands: Vec<&mut Expr>,
 ) -> Result<(), SqlError> {
@@ -379,7 +424,28 @@ fn mark(
             _ => e.clone(),
         }
     };
-    let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)));
+    // Scalar ISNULL widths have a declared character result but are not
+    // catalog columns. Use that declaration only with proved character peers;
+    // numeric and unresolved operands retain their coercion path.
+    fn scalar_character(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(inner) => scalar_character(inner),
+            Expr::Function(f) => {
+                matches!(
+                    f.name.to_string().as_str(),
+                    "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+                ) || f.name.to_string().eq_ignore_ascii_case("ISNULL")
+                    && first_argument(f).is_some_and(|a| matches!(a, Expr::Subquery(_)))
+            }
+            _ => false,
+        }
+    }
+    let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)))
+        || operands.iter().any(|o| scalar_character(o))
+            && operands.iter().all(|o| {
+                text(catalog, parameters, o)
+                    || matches!(&**o, Expr::Value(v) if v.value == Value::Null)
+            });
     let typed = operands.iter().any(|o| not_text(catalog, o));
     for operand in operands {
         let name = if text {
@@ -458,9 +524,13 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
         }
         _ => return,
     };
-    if !operands
-        .iter()
-        .all(|o| !collated(o) && !marked(o) && text(&catalog, parameters, o))
+    if !operands.iter().any(|o| text(&catalog, parameters, o))
+        || !operands.iter().all(|o| {
+            !collated(o)
+                && !marked(o)
+                && (text(&catalog, parameters, o)
+                    || matches!(&**o, Expr::Value(v) if v.value == Value::Null))
+        })
     {
         return;
     }
@@ -567,7 +637,7 @@ pub(super) fn rewrite<T: VisitMut>(
     parameters: &Parameters,
     node: &mut T,
 ) -> Result<(), SqlError> {
-    struct Mark<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>);
+    struct Mark<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
     impl Mark<'_> {
         fn catalog(&self) -> &Catalog {
             self.2.last().unwrap_or(self.0)
@@ -577,9 +647,14 @@ pub(super) fn rewrite<T: VisitMut>(
         type Break = SqlError;
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<SqlError> {
             self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
             ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<SqlError> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
             self.2.pop();
             ControlFlow::Continue(())
         }
@@ -588,7 +663,11 @@ pub(super) fn rewrite<T: VisitMut>(
             ControlFlow::Continue(())
         }
         fn post_visit_select(&mut self, _: &mut Select) -> ControlFlow<SqlError> {
-            self.2.pop();
+            // Query ORDER BY is visited after its SELECT. Retain this frame
+            // until post_query; set-operation arms still pop independently.
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
             ControlFlow::Continue(())
         }
 
@@ -811,7 +890,7 @@ pub(super) fn rewrite<T: VisitMut>(
             }
         }
     }
-    match VisitMut::visit(node, &mut Mark(catalog, parameters, Vec::new())) {
+    match VisitMut::visit(node, &mut Mark(catalog, parameters, Vec::new(), Vec::new())) {
         ControlFlow::Break(error) => Err(error),
         ControlFlow::Continue(()) => Ok(()),
     }
