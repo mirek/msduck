@@ -805,3 +805,191 @@ test('OPENJSON alternatives preserve captured raw units, bounded widths and nume
     assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
   }
 })
+
+// Six complete SQL Server 17.0.4065.4 captures for direct set branches.
+const directSetCases = [
+  {
+    "name": "direct unpaired union all",
+    "query": "SELECT j.value AS v FROM OPENJSON(N'[\"\\ud800\"]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct bounded union all",
+    "query": "SELECT j.v FROM OPENJSON(N'{\"v\":\"\\ud800\"}') WITH(v NVARCHAR(2)) j UNION ALL SELECT CAST(N'abcd' AS NVARCHAR(4))",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              8
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "abcd"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct distinct numeric boundary",
+    "query": "(SELECT j.value AS v FROM OPENJSON(N'[\"01\",\"1\"]') j UNION SELECT N'1') UNION ALL SELECT 7",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "IntN",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ],
+            [
+              1
+            ],
+            [
+              7
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  },
+  {
+    "name": "direct default distinct",
+    "query": "SELECT j.value AS v FROM OPENJSON(N'[\"x \"]') j UNION SELECT N'X' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x "
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "direct cast union all",
+    "query": "SELECT CAST(j.value AS NVARCHAR(2)) AS v FROM OPENJSON(N'[\"\\ud800\"]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "direct isnull union all",
+    "query": "SELECT ISNULL(j.value,N'z') AS v FROM OPENJSON(N'[\"\\ud800\",null]') j UNION ALL SELECT N'x' ",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "\ud800"
+            ],
+            [
+              "z"
+            ],
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  }
+]
+
+test('direct OPENJSON sets preserve captured UTF-16 units and nested type boundaries', async t => {
+  const connection = await start(t)
+  for (const entry of directSetCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
+})

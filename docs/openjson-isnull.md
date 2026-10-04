@@ -186,3 +186,11 @@ Both predicate marking and ANSI range padding retain their own SELECT scope
 through query ordering without exposing its sources to WITH definitions. Client replay compares captured
 rows, descriptor names/types/lengths, errors and completion counts. These
 focused cases do not establish full SQL Server compatibility.
+
+Direct OPENJSON set branches, explicit Unicode casts and character ISNULL
+outputs now enter the same carrier alignment as character alternatives, using
+their own declared result types. Each immediate set child finishes DISTINCT
+before a parent numeric conversion. Six additional pinned SQL Server captures
+check unpaired UTF-16 payloads, bounded result widths, ISNULL fallback rows,
+case/trailing-space equality and the nested numeric boundary. Unknown outputs
+and numeric expressions do not gain a character declaration from provenance.

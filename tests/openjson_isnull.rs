@@ -971,3 +971,29 @@ fn order_predicates_use_select_sources_and_declared_parameter_peers() {
         .unwrap();
     assert_eq!(rows, vec![vec![b'x', 0], vec![b'z', 0]]);
 }
+
+#[test]
+fn direct_openjson_set_branches_preserve_units_and_binary_type_boundaries() {
+    let (_server, mut session) = session();
+    for (index, source) in [
+        r#"SELECT j.value AS v FROM OPENJSON(N'["\ud800"]') j UNION ALL SELECT N'x'"#,
+        r#"SELECT CAST(j.value AS NVARCHAR(2)) AS v FROM OPENJSON(N'["\ud800"]') j UNION ALL SELECT N'x'"#,
+    ].iter().enumerate() {
+        batch(&mut session, &format!("CREATE TABLE direct_set_{index}(v NVARCHAR(MAX)); INSERT direct_set_{index} {source}"));
+        let rows:Vec<Vec<u8>> = session.db.prepare(&format!("SELECT v.__msduck_utf16le FROM direct_set_{index}")).unwrap().query_map([],|r|r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        assert_eq!(rows, vec![vec![0,0xd8],vec![b'x',0]], "{index}: {source}");
+    }
+    batch(
+        &mut session,
+        r#"CREATE TABLE direct_numeric_boundary(v INT); INSERT direct_numeric_boundary (SELECT j.value AS v FROM OPENJSON(N'["01","1"]') j UNION SELECT N'1') UNION ALL SELECT 7"#,
+    );
+    let rows: Vec<i32> = session
+        .db
+        .prepare("SELECT v FROM direct_numeric_boundary")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![1, 1, 7]);
+}

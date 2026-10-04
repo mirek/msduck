@@ -384,7 +384,7 @@ fn character(kind: &DataType) -> bool {
     )
 }
 
-fn migrated_kind(
+fn preserved_set_kind(
     catalog: &Catalog,
     expr: &Expr,
     parameters: &HashMap<String, Parameter>,
@@ -392,7 +392,14 @@ fn migrated_kind(
     if !msduck_sql::expression_metadata::conditional::candidate(expr)
         || matches!(expr, Expr::Function(f) if f.name.to_string().eq_ignore_ascii_case("ISNULL"))
     {
-        return None;
+        // Direct sources and explicit Unicode wrappers already have their
+        // own declarations. ISNULL uses its first result type rather than
+        // the common type of its alternatives. Preserve those carriers at
+        // each set boundary instead of falling back to a VARCHAR cast.
+        return openjson_carrier(catalog, expr)
+            .then(|| expression_kind(catalog, expr, parameters))
+            .flatten()
+            .filter(character);
     }
     openjson_character_result(
         catalog,
@@ -436,6 +443,36 @@ fn coerce_set_child(body: &mut Box<SetExpr>, columns: &[SetColumn], kinds: &[Opt
     if kinds.iter().all(Option::is_none) {
         return;
     }
+    // Annotate proved character leaves before wrapping their completed
+    // output. Packing only the outer reference is too late for a legacy
+    // inner Unicode CAST that would already have stringified a carrier.
+    fn preserve_leaf(body: &mut SetExpr, columns: &[SetColumn], kinds: &[Option<DataType>]) {
+        match body {
+            SetExpr::Query(query) => preserve_leaf(&mut query.body, columns, kinds),
+            SetExpr::Select(select) => {
+                for ((item, source), target) in select.projection.iter_mut().zip(columns).zip(kinds)
+                {
+                    if !source.affected
+                        || target.is_none()
+                        || !source.kind.as_ref().is_some_and(character)
+                    {
+                        continue;
+                    }
+                    let value = match item {
+                        SelectItem::UnnamedExpr(value)
+                        | SelectItem::ExprWithAlias { expr: value, .. } => value,
+                        _ => continue,
+                    };
+                    let original = std::mem::replace(value, Expr::Value(Value::Null.into()));
+                    *value = msduck_sql::expr::unary_function("__msduck_carrier_input", original);
+                }
+            }
+            // Each binary child has already finished its own conversions
+            // and equality. Never distribute a parent's type into its leaves.
+            _ => {}
+        }
+    }
+    preserve_leaf(body, columns, kinds);
     let names = columns
         .iter()
         .map(|column| column.name.clone())
@@ -491,7 +528,7 @@ fn normalize_sets(
                 .iter()
                 .map(|item| {
                     let expr = item_expr(item)?;
-                    let migrated = migrated_kind(&scope, expr, parameters);
+                    let migrated = preserved_set_kind(&scope, expr, parameters);
                     let name = match item {
                         SelectItem::ExprWithAlias { alias, .. } => alias.value.clone(),
                         SelectItem::UnnamedExpr(Expr::Identifier(name)) => name.value.clone(),
