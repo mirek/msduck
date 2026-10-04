@@ -991,7 +991,9 @@ impl Session {
         // Access to each database is checked first, as USE checks it (924
         // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
         // object of another database is an invalid object name.
-        drop(self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?);
+        // The guards are kept until the statement ends (see `CrossDatabase`),
+        // so the databases cannot be dropped in between.
+        let held = self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?;
         for name in &relations.foreign_names {
             if let Some((alias, local)) =
                 crate::query_catalog::foreign_relation(&self.db, &relations.current, name)?
@@ -1066,16 +1068,14 @@ impl Session {
         // database's catalog views describe it only from inside it.
         if dml.is_none() {
             if !relations.catalog_views {
-                return Ok(CrossDatabase::Mixed(
-                    relations.foreign.into_keys().collect(),
-                ));
+                return Ok(CrossDatabase::Mixed(held));
             }
             if relations.foreign.len() == 1
                 && relations.local.is_empty()
                 && !relations.into
                 && !relations.routines
             {
-                return Ok(CrossDatabase::Home(database.clone(), vec![]));
+                return Ok(CrossDatabase::Home(database.clone(), held));
             }
             bail!(
                 "unsupported cross-database statement: it reads catalog views of database '{}' together with objects or user functions of other databases",
@@ -1085,7 +1085,7 @@ impl Session {
         if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
             refuse_output_into(&display(database))?;
             refuse_routines(&display(database))?;
-            return Ok(CrossDatabase::Home(database.clone(), vec![]));
+            return Ok(CrossDatabase::Home(database.clone(), held));
         }
         // A statement that writes another database runs there, reading the
         // current database and any others through three-part names.
@@ -1108,17 +1108,9 @@ impl Session {
             }
             refuse_output_into(&display(&alias.value))?;
             refuse_routines(&display(&alias.value))?;
-            let home = alias.value.clone();
-            let others = relations
-                .foreign
-                .into_keys()
-                .filter(|other| *other != home)
-                .collect();
-            return Ok(CrossDatabase::Home(home, others));
+            return Ok(CrossDatabase::Home(alias.value.clone(), held));
         }
-        Ok(CrossDatabase::Mixed(
-            relations.foreign.into_keys().collect(),
-        ))
+        Ok(CrossDatabase::Mixed(held))
     }
 
     /// Make `home`, another database, the connection's DuckDB default
@@ -1523,7 +1515,7 @@ impl Session {
                     CrossDatabase::Home(home, others) => {
                         let targets = alias_targets(&qualified);
                         rehome(&mut qualified, &home, &self.current_alias()?, &targets);
-                        let _others = self.use_others(&others)?;
+                        let _others = others;
                         let home = self.enter_home(&home)?;
                         let result = self.validate_prepared_dml(qualified, &mut parameters);
                         self.leave_home(home);
@@ -1531,7 +1523,7 @@ impl Session {
                         continue;
                     }
                     CrossDatabase::Mixed(others) => {
-                        let _others = self.use_others(&others)?;
+                        let _others = others;
                         self.validate_prepared_dml(qualified, &mut parameters)?;
                         continue;
                     }
@@ -1690,14 +1682,14 @@ impl Session {
             CrossDatabase::Local => self.validate_prepared_expression_here(expression, parameters),
             CrossDatabase::Home(home, others) => {
                 rehome(&mut expression, &home, &self.current_alias()?, &[]);
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 let home = self.enter_home(&home)?;
                 let result = self.validate_prepared_expression_here(expression, parameters);
                 self.leave_home(home);
                 result
             }
             CrossDatabase::Mixed(others) => {
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 self.validate_prepared_expression_here(expression, parameters)
             }
         }
@@ -2880,11 +2872,11 @@ impl Session {
                 self.execute(*statement, parameters)
             }
             Routed::Home(statement, home, others) => {
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 self.execute_in_home(*statement, &home, parameters)
             }
             Routed::Mixed(statement, others) => {
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 self.routed.set(true);
                 self.execute(*statement, parameters)
             }
@@ -4408,7 +4400,7 @@ impl Session {
             CrossDatabase::Local => {}
             CrossDatabase::Home(home, others) => {
                 rehome(&mut expression, &home, &self.current_alias()?, &[]);
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 let home = self.enter_home(&home)?;
                 let result =
                     self.evaluate_expression_here(expression, parameters, predicate, diagnostics);
@@ -4416,7 +4408,7 @@ impl Session {
                 return result;
             }
             CrossDatabase::Mixed(others) => {
-                let _others = self.use_others(&others)?;
+                let _others = others;
                 return self.evaluate_expression_here(
                     expression,
                     parameters,
@@ -8285,8 +8277,8 @@ fn names_other_databases(statement: &Statement) -> bool {
 /// Where `Session::execute` runs a statement.
 enum Routed {
     Here(Box<Statement>),
-    Home(Box<Statement>, String, Vec<String>),
-    Mixed(Box<Statement>, Vec<String>),
+    Home(Box<Statement>, String, Vec<OtherUse>),
+    Mixed(Box<Statement>, Vec<OtherUse>),
 }
 
 /// How a statement refers to databases other than the current one.
@@ -8294,12 +8286,11 @@ enum CrossDatabase {
     /// Only the current database.
     Local,
     /// `0`, another database, in which the statement runs, because it
-    /// references nothing else or writes it. It reads the current database
-    /// and the others listed in `1`.
-    Home(String, Vec<String>),
-    /// The current database and the others listed, or several others,
-    /// which it reads.
-    Mixed(Vec<String>),
+    /// writes it or reads only its catalog views. `1` holds every other
+    /// database the statement uses until it ends.
+    Home(String, Vec<OtherUse>),
+    /// Runs in the current database, reading the other databases it holds.
+    Mixed(Vec<OtherUse>),
 }
 
 /// Name relations as seen from `home`, the database a statement runs in:
