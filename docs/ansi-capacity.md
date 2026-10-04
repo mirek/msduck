@@ -166,7 +166,7 @@ intermediate is required.
 The new pure replay preserves all512 original task940 outcomes (248 successful
 observations/496 row applications and264 failed loads), plus4032 earlier
 admitted UTF8 observations/8064 applications/224 failed loads from boundary913,
-bounded-target919, octet925 and multibyte930. Raw source/native bytes and SQL
+bounded-target919, octet and multibyte930. Raw source/native bytes and SQL
 UTF16 units remain distinct from display. Original failed messages can contain
 lone surrogate escapes; their numeric diagnostic fields and empty readbacks are
 read without repairing those messages. Native and pure fixtures are unchanged.
