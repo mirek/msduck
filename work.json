@@ -11942,7 +11942,7 @@
     {
       "id": "bulk-character-collation-precedence-reference-v1",
       "title": "Capture BulkLoad source, wire and target collation precedence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party source review shows bulk plan drops declared COLLATE and wire ANSI decoding hardcodes CP1252. Done owner references895/899 establish three explicit declaration/wire conflicts but do not establish all target conversion or omitted source COLLATE quadrants. Acquire bounded actual SQL Server evidence before operational root adoption; no third-party content.",
       "scope": [
         "scripts/capture-bulk-character-collation-precedence.mjs",
