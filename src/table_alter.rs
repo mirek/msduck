@@ -230,6 +230,51 @@ pub fn execute_declared(
                 );
             }
         }
+        // Preflight every removal before the first DDL command. A later error
+        // cannot roll back just this statement inside a caller-owned transaction.
+        let removed = table
+            .operations
+            .iter()
+            .filter_map(|operation| {
+                if let AlterTableOperation::DropColumn { column_names, .. } = operation {
+                    Some(column_names.iter().map(|name| name.value.as_str()))
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        if !removed.is_empty() {
+            for (column, sequence) in &identities {
+                if !removed.iter().any(|name| name.eq_ignore_ascii_case(column)) {
+                    continue;
+                }
+                for (schema, target, dependent) in crate::identity::dependent_columns(db, sequence)?
+                {
+                    let same_table = match table.name.0.as_slice() {
+                        [ObjectNamePart::Identifier(name)] => {
+                            schema.eq_ignore_ascii_case("dbo")
+                                && target.eq_ignore_ascii_case(&name.value)
+                        }
+                        [
+                            ObjectNamePart::Identifier(owner),
+                            ObjectNamePart::Identifier(name),
+                        ] => {
+                            schema.eq_ignore_ascii_case(&owner.value)
+                                && target.eq_ignore_ascii_case(&name.value)
+                        }
+                        _ => false,
+                    };
+                    ensure!(
+                        same_table
+                            && removed
+                                .iter()
+                                .any(|name| name.eq_ignore_ascii_case(&dependent)),
+                        "Cannot drop private IDENTITY sequence {sequence}: still referenced by {schema}.{target}.{dependent}"
+                    );
+                }
+            }
+        }
         for definition in definitions {
             definition.install(db)?;
         }
@@ -438,5 +483,173 @@ mod tests {
         db.execute_batch("INSERT INTO dbo.ids(v) VALUES(3)")
             .unwrap();
         assert_eq!(count("SELECT count(*) FROM dbo.ids"), 3);
+    }
+
+    #[test]
+    fn identity_dependency_preflight_preserves_explicit_transaction_and_all_drop_actions() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::identity_metadata::register(&db).unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let parse = |sql: &str| {
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                .unwrap()
+                .remove(0)
+        };
+        crate::identity::create(
+            &db,
+            &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),v INT,keeper INT DEFAULT 9)"),
+            true,
+        )
+        .unwrap();
+        db.execute_batch("INSERT INTO dbo.ids(v) VALUES(1)")
+            .unwrap();
+        let sequence: String = db
+            .query_row(
+                "SELECT schema_name||'.'||sequence_name FROM duckdb_sequences()",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        db.execute_batch(&format!(
+            "CREATE TABLE dbo.dependent(d BIGINT DEFAULT (nextval('{sequence}')+1))"
+        ))
+        .unwrap();
+        let Statement::AlterTable(mut drop) = parse("ALTER TABLE dbo.ids DROP COLUMN v") else {
+            panic!()
+        };
+        let Statement::AlterTable(id) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+            panic!()
+        };
+        drop.operations.extend(id.operations);
+        for autocommit in [true, false] {
+            if !autocommit {
+                db.execute_batch("BEGIN").unwrap();
+            }
+            assert!(execute(&db, &drop, autocommit).is_err());
+            assert_eq!(
+                db.query_row("SELECT id,v FROM dbo.ids", [], |row| Ok((
+                    row.get::<_, i32>(0)?,
+                    row.get::<_, i32>(1)?
+                )))
+                .unwrap(),
+                (10, 1)
+            );
+            assert_eq!(
+                db.query_row("SELECT last_value FROM duckdb_sequences()", [], |row| row
+                    .get::<_, i64>(
+                    0
+                ))
+                .unwrap(),
+                10
+            );
+            assert_eq!(
+                db.query_row(
+                    "SELECT count(*) FROM main.__msduck_identity_definitions",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+                1
+            );
+            if !autocommit {
+                db.execute_batch("INSERT INTO dbo.ids(v) VALUES(2)")
+                    .unwrap();
+                assert_eq!(
+                    db.query_row("SELECT max(id) FROM dbo.ids", [], |row| row
+                        .get::<_, i32>(0))
+                        .unwrap(),
+                    15
+                );
+                db.execute_batch("ROLLBACK").unwrap();
+            }
+        }
+        // An unrelated removal may proceed while the sequence is still in use.
+        db.execute_batch("BEGIN").unwrap();
+        let Statement::AlterTable(unrelated) = parse("ALTER TABLE dbo.ids DROP COLUMN v") else {
+            panic!()
+        };
+        execute(&db, &unrelated, false).unwrap();
+        assert_eq!(
+            db.query_row("SELECT id FROM dbo.ids", [], |row| row.get::<_, i32>(0))
+                .unwrap(),
+            10
+        );
+        db.execute_batch("ROLLBACK; DROP TABLE dbo.dependent")
+            .unwrap();
+        execute(&db, &drop, true).unwrap();
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn identity_preflight_allows_removing_every_same_table_dependent_default() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::identity_metadata::register(&db).unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let parse = |sql: &str| {
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                .unwrap()
+                .remove(0)
+        };
+        crate::identity::create(
+            &db,
+            &parse("CREATE TABLE dbo.ids(id INT IDENTITY,keeper INT)"),
+            true,
+        )
+        .unwrap();
+        db.execute_batch("INSERT INTO dbo.ids(keeper) VALUES(7)")
+            .unwrap();
+        let sequence: String = db
+            .query_row(
+                "SELECT schema_name||'.'||sequence_name FROM duckdb_sequences()",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        db.execute_batch(&format!(
+            "ALTER TABLE dbo.ids ADD COLUMN dependent BIGINT DEFAULT (nextval('{sequence}')+1)"
+        ))
+        .unwrap();
+        let Statement::AlterTable(mut drop) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+            panic!()
+        };
+        let Statement::AlterTable(dependent) = parse("ALTER TABLE dbo.ids DROP COLUMN dependent")
+        else {
+            panic!()
+        };
+        drop.operations.extend(dependent.operations);
+        db.execute_batch("BEGIN").unwrap();
+        execute(&db, &drop, false).unwrap();
+        assert_eq!(
+            db.query_row("SELECT keeper FROM dbo.ids", [], |row| row.get::<_, i32>(0))
+                .unwrap(),
+            7
+        );
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        db.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            db.query_row(
+                "SELECT count(id),count(dependent) FROM dbo.ids",
+                [],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            )
+            .unwrap(),
+            (1, 1)
+        );
+        execute(&db, &drop, true).unwrap();
+        assert_eq!(
+            db.query_row("SELECT keeper FROM dbo.ids", [], |row| row.get::<_, i32>(0))
+                .unwrap(),
+            7
+        );
     }
 }

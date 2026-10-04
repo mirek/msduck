@@ -37,6 +37,180 @@ pub fn is_default(value: Option<&str>) -> bool {
     sequence_name(value).is_some()
 }
 
+fn table_key(name: &ObjectName) -> Option<(String, String)> {
+    let parts = name
+        .0
+        .iter()
+        .map(|part| part.as_ident().map(|id| id.value.as_str()))
+        .collect::<Option<Vec<_>>>()?;
+    match parts.as_slice() {
+        [table] => Some(("dbo".into(), (*table).into())),
+        [schema, table] => Some(((*schema).into(), (*table).into())),
+        _ => None,
+    }
+}
+
+// Defaults are catalog SQL, never commands to execute. Only statically known
+// nextval arguments establish dependencies; uncertainty must stay explicit.
+fn sequence_argument(expr: &Expr) -> Result<Option<String>> {
+    match expr {
+        Expr::Value(value) => match &value.value {
+            Value::SingleQuotedString(text) => {
+                ensure!(
+                    text.len() <= 1024,
+                    "Private sequence reference exceeds name analysis limit"
+                );
+                Ok(Some(text.clone()))
+            }
+            Value::Null => Ok(None),
+            _ => bail!("Unsupported private sequence default argument"),
+        },
+        Expr::Nested(expr) => sequence_argument(expr),
+        Expr::Cast {
+            expr,
+            data_type:
+                DataType::Char(_)
+                | DataType::Varchar(_)
+                | DataType::Character(_)
+                | DataType::CharacterVarying(_)
+                | DataType::Text
+                | DataType::String(_),
+            ..
+        } => sequence_argument(expr),
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::StringConcat,
+            right,
+        } => match (sequence_argument(left)?, sequence_argument(right)?) {
+            (Some(mut left), Some(right)) => {
+                ensure!(
+                    left.len()
+                        .checked_add(right.len())
+                        .is_some_and(|len| len <= 1024),
+                    "Private sequence reference exceeds name analysis limit"
+                );
+                left.push_str(&right);
+                Ok(Some(left))
+            }
+            _ => Ok(None),
+        },
+        _ => bail!("Unsupported dynamic private sequence default argument"),
+    }
+}
+
+fn sequence_key(name: &str, schema: &str) -> Result<(String, String)> {
+    let mut parser = Parser::new(&GenericDialect {}).try_with_sql(name)?;
+    let name = parser.parse_object_name(false)?;
+    ensure!(
+        parser.peek_token().token == sqlparser::tokenizer::Token::EOF,
+        "Unsupported trailing private sequence reference syntax"
+    );
+    let parts = name
+        .0
+        .iter()
+        .map(|part| part.as_ident().map(|id| id.value.as_str()))
+        .collect::<Option<Vec<_>>>();
+    match parts.as_deref() {
+        Some([name]) => Ok((schema.into(), (*name).into())),
+        Some([schema, name]) => Ok(((*schema).into(), (*name).into())),
+        _ => bail!("Unsupported qualified private sequence reference"),
+    }
+}
+
+fn references_sequence(default: &str, name: &str, schema: &str) -> Result<bool> {
+    let mut parser = Parser::new(&GenericDialect {}).try_with_sql(default)?;
+    let expr = parser.parse_expr()?;
+    ensure!(
+        parser.peek_token().token == sqlparser::tokenizer::Token::EOF,
+        "Unsupported native default dependency syntax"
+    );
+    let expected = sequence_key(name, schema)?;
+    let mut found = false;
+    let mut failure = None;
+    let _ = visit_expressions(&expr, |expr| {
+        let Expr::Function(function) = expr else {
+            return std::ops::ControlFlow::Continue(());
+        };
+        if !function
+            .name
+            .0
+            .last()
+            .and_then(ObjectNamePart::as_ident)
+            .is_some_and(|id| id.value.eq_ignore_ascii_case("nextval"))
+        {
+            return std::ops::ControlFlow::Continue(());
+        }
+        let result = (|| -> Result<bool> {
+            let FunctionArguments::List(arguments) = &function.args else {
+                bail!("Unsupported private sequence default arguments");
+            };
+            let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = arguments.args.as_slice()
+            else {
+                bail!("Unsupported private sequence default arguments");
+            };
+            let Some(name) = sequence_argument(value)? else {
+                return Ok(false);
+            };
+            let actual = sequence_key(&name, schema)?;
+            Ok(actual.0.eq_ignore_ascii_case(&expected.0)
+                && actual.1.eq_ignore_ascii_case(&expected.1))
+        })();
+        match result {
+            Ok(false) => std::ops::ControlFlow::Continue(()),
+            Ok(true) => {
+                found = true;
+                std::ops::ControlFlow::Break(())
+            }
+            Err(error) => {
+                failure = Some(error);
+                std::ops::ControlFlow::Break(())
+            }
+        }
+    });
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    Ok(found)
+}
+
+/// Live column defaults referring to a private sequence. No sequence is read or advanced.
+pub(crate) fn dependent_columns(
+    db: &Connection,
+    name: &str,
+) -> Result<Vec<(String, String, String)>> {
+    let schema: String = db.query_row("SELECT current_schema()", [], |row| row.get(0))?;
+    let mut statement = db.prepare("SELECT table_schema,table_name,column_name,column_default FROM information_schema.columns WHERE table_catalog=current_database() AND column_default IS NOT NULL")?;
+    let mut dependents = Vec::new();
+    for row in statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        ))
+    })? {
+        let (table_schema, table, column, default) = row?;
+        if references_sequence(&default, name, &schema)? {
+            dependents.push((table_schema, table, column));
+        }
+    }
+    Ok(dependents)
+}
+
+fn ensure_no_dependents(db: &Connection, name: &str, dropping: &[(String, String)]) -> Result<()> {
+    for (schema, table, column) in dependent_columns(db, name)? {
+        if dropping.iter().any(|(drop_schema, drop_table)| {
+            schema.eq_ignore_ascii_case(drop_schema) && table.eq_ignore_ascii_case(drop_table)
+        }) {
+            continue;
+        }
+        bail!(
+            "Cannot drop private IDENTITY sequence {name}: still referenced by {schema}.{table}.{column}"
+        );
+    }
+    Ok(())
+}
+
 pub(crate) fn columns(db: &Connection, name: &ObjectName) -> Result<Vec<(String, String)>> {
     let parts = name
         .0
@@ -72,7 +246,9 @@ fn table_sequences(db: &Connection, name: &ObjectName) -> Result<Vec<String>> {
 }
 
 pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
-    // Names are recognized private sequence defaults. Never cascade dependencies.
+    // Inspect live defaults before removal; native dependency tracking can lose
+    // default edges following ALTER inside the same transaction. Never cascade.
+    ensure_no_dependents(db, name, &[])?;
     db.execute_batch(&format!("DROP SEQUENCE {name}"))?;
     catalog(db)?;
     db.execute(
@@ -99,6 +275,10 @@ pub fn drop_table(db: &Connection, statement: &Statement, autocommit: bool) -> R
         let mut sequences = std::collections::BTreeSet::new();
         for name in names {
             sequences.extend(table_sequences(db, name)?);
+        }
+        let dropping = names.iter().filter_map(table_key).collect::<Vec<_>>();
+        for sequence in &sequences {
+            ensure_no_dependents(db, sequence, &dropping)?;
         }
         db.execute_batch(&statement.to_string())?;
         for name in sequences {
@@ -338,6 +518,134 @@ pub fn create(db: &Connection, statement: &Statement, autocommit: bool) -> Resul
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dependency_preflight_keeps_prior_ddl_and_caller_transaction_usable() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let parse = |sql: &str| {
+            Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                .unwrap()
+                .remove(0)
+        };
+        create(
+            &db,
+            &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),keeper INT)"),
+            true,
+        )
+        .unwrap();
+        db.execute_batch("INSERT INTO dbo.ids(keeper) VALUES(7)")
+            .unwrap();
+        let name = table_sequences(
+            &db,
+            &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+        )
+        .unwrap()
+        .remove(0);
+        db.execute_batch(&format!("CREATE TABLE dbo.dependent(d BIGINT DEFAULT (nextval('{name}')+1)); BEGIN; ALTER TABLE dbo.ids ADD COLUMN prior_change INT")).unwrap();
+        assert!(drop_table(&db, &parse("DROP TABLE dbo.ids"), false).is_err());
+        assert_eq!(
+            db.query_row(
+                "SELECT id,keeper,prior_change IS NULL FROM dbo.ids",
+                [],
+                |row| Ok((
+                    row.get::<_, i32>(0)?,
+                    row.get::<_, i32>(1)?,
+                    row.get::<_, bool>(2)?
+                ))
+            )
+            .unwrap(),
+            (10, 7, true)
+        );
+        assert_eq!(
+            db.query_row("SELECT last_value FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+            10
+        );
+        db.execute_batch("UPDATE dbo.ids SET prior_change=9; COMMIT")
+            .unwrap();
+        assert_eq!(
+            db.query_row("SELECT prior_change FROM dbo.ids", [], |row| row
+                .get::<_, i32>(0))
+                .unwrap(),
+            9
+        );
+        db.execute_batch("DROP TABLE dbo.dependent").unwrap();
+        drop_table(&db, &parse("DROP TABLE dbo.ids"), true).unwrap();
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn native_default_dependencies_cover_nested_quoted_cast_and_constant_names() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let ddl = Parser::parse_sql(
+            &sqlparser::dialect::MsSqlDialect {},
+            "CREATE TABLE dbo.ids(id INT IDENTITY(10,5), keeper INT)",
+        )
+        .unwrap()
+        .remove(0);
+        create(&db, &ddl, true).unwrap();
+        db.execute_batch("INSERT INTO dbo.ids(keeper) VALUES(1)")
+            .unwrap();
+        let name = table_sequences(
+            &db,
+            &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+        )
+        .unwrap()
+        .remove(0);
+        let basename = name.strip_prefix("main.").unwrap();
+        for (index, expression) in [
+            format!("nextval('{}')+1", name.to_ascii_uppercase()),
+            format!("nextval('main.\"{basename}\"')"),
+            format!("nextval('{name}'::VARCHAR)+1"),
+            format!("nextval('main.'||'{basename}')"),
+            format!("\"nextval\"('{name}')"),
+            format!("nextval('{basename}')"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            db.execute_batch(&format!(
+                "CREATE TABLE dbo.dep_{index}(d BIGINT DEFAULT ({expression}))"
+            ))
+            .unwrap();
+        }
+        db.execute_batch(&format!(
+            "CREATE TABLE dbo.literal(d VARCHAR DEFAULT '{name}')"
+        ))
+        .unwrap();
+        let dependents = dependent_columns(&db, &name).unwrap();
+        assert_eq!(dependents.len(), 7);
+        for index in 0..6 {
+            assert!(
+                dependents
+                    .iter()
+                    .any(|(schema, table, column)| schema == "dbo"
+                        && table == &format!("dep_{index}")
+                        && column == "d")
+            );
+        }
+        assert!(!dependents.iter().any(|(_, table, _)| table == "literal"));
+        assert_eq!(
+            db.query_row("SELECT last_value FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+            10
+        );
+        assert!(references_sequence("nextval(lower('main.example'))", &name, "main").is_err());
+        assert!(!references_sequence("nextval(NULL)", &name, "main").unwrap());
+    }
+
     use super::*;
     #[test]
     fn table_drop_cleans_sequences_and_rollback_restores_both() {
