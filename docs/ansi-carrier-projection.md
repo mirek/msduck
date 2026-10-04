@@ -80,6 +80,7 @@ validation, allowing UTF8-to-codepage capacity without relaxing strict complete
 projection. `Plan::new` still rejects UTF8-to-CP1251/CP1252 even for NULL. Whole
 chunk shape/tag/child/input checks and fallible output preparation are unchanged.
 The new callback suite replays all512 original task940 native/error outcomes
-(264 failed loads), preserving exact target bytes and SQL UTF16 units. Its native
-build/full verification is pending; source registration remains an internal
+(264 failed loads), preserving exact target bytes and SQL UTF16 units. All eight native capacity tests passed at checkpoint
+`1a267cf63ccae0888a4299ffde9188e99a22968b`; full frozen-revision verification
+and review remain pending; source registration remains an internal
 caller-owned operation with no endpoint collation gate enabled.

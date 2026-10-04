@@ -154,7 +154,10 @@ fn public_cp1251_capacity_replays_four_native_oracles() {
 }
 #[test]
 fn cp1251_plan_validates_declarations_and_mismatches() {
-    for source in [EncodingIdentity::Opaque(1251)] {
+    for source in [
+        EncodingIdentity::Opaque(1251),
+        EncodingIdentity::Opaque(65001),
+    ] {
         assert_eq!(
             Plan::new(
                 source,
