@@ -718,3 +718,25 @@ fn dml_reads_catalog_views_only_of_the_database_it_writes() {
     assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 1);
     assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.audit"), 0);
 }
+
+#[test]
+fn dml_writing_another_database_does_not_read_local_catalog_views() {
+    let (_server, mut session) = fixture();
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.cols (name NVARCHAR(128)); USE master",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "INSERT foo.dbo.cols SELECT name FROM sys.columns"
+        ),
+        (
+            40515,
+            1,
+            16,
+            "unsupported cross-database statement: it writes database 'foo' and reads catalog views of the session's database".into()
+        )
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 0);
+}

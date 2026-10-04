@@ -1120,6 +1120,12 @@ impl Session {
             refuse_output_into(&display(&alias.value))?;
             refuse_routines(&display(&alias.value))?;
             refuse_catalog_views()?;
+            if relations.local_catalog_views {
+                bail!(
+                    "unsupported cross-database statement: it writes database '{}' and reads catalog views of the session's database",
+                    display(&alias.value)
+                );
+            }
             return Ok(CrossDatabase::Home(alias.value.clone(), held));
         }
         if relations.catalog_views {
@@ -8084,6 +8090,8 @@ struct Relations {
     /// are read. They describe the DuckDB default catalog, so only a
     /// statement running in that database reads them correctly.
     catalog_views: bool,
+    /// Whether the session database's catalog views are read.
+    local_catalog_views: bool,
     /// Relation nodes of the current database.
     local: Vec<*const ObjectName>,
     /// Whether a SELECT INTO creates a table in the current database.
@@ -8155,7 +8163,19 @@ impl Relations {
                 self.temporary = true;
                 self.local.push(node);
             }
-            _ => self.local.push(node),
+            _ => {
+                if let [
+                    ObjectNamePart::Identifier(schema),
+                    ObjectNamePart::Identifier(view),
+                ] = name.0.as_slice()
+                    && (schema.value.eq_ignore_ascii_case("INFORMATION_SCHEMA")
+                        || schema.value.eq_ignore_ascii_case("sys")
+                            && !view.value.eq_ignore_ascii_case("databases"))
+                {
+                    self.local_catalog_views = true;
+                }
+                self.local.push(node)
+            }
         }
     }
 }
