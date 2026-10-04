@@ -11938,6 +11938,30 @@
       ],
       "issue": 953,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmjqe"
+    },
+    {
+      "id": "bulk-character-collation-precedence-reference-v1",
+      "title": "Capture BulkLoad source, wire and target collation precedence",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party source review shows bulk plan drops declared COLLATE and wire ANSI decoding hardcodes CP1252. Done owner references895/899 establish three explicit declaration/wire conflicts but do not establish all target conversion or omitted source COLLATE quadrants. Acquire bounded actual SQL Server evidence before operational root adoption; no third-party content.",
+      "scope": [
+        "scripts/capture-bulk-character-collation-precedence.mjs",
+        "reference/bulk-character-collation-precedence.json",
+        "tests/bulk-character-collation-precedence-capture.test.mjs",
+        "docs/bulk-character-collation-precedence-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-capacity-reference-v1"
+      ],
+      "acceptance": [
+        "Inspect unchanged895/899 originals and retain their proven disagreement observations separately. New narrow126-control VARCHAR matrix:36 explicit source CP1251/CP1252/UTF8 x wire3 x target CP1251/CP1252/UTF8/Unicode at bounded source64; same36 sourceMAX with independently validated PLP;36 omitted source COLLATE using independently recorded actual database default3 x wire3 x target4;18 explicit source3 x zero/omitted/rawffff0f0000 unrecognized descriptor x NULL-only/nonASCII discriminator, Unicode target. Normal controls retain NULL/empty/ASCII and original rawc3a9 and f09fa686 bytes. Do not infer source/default/wire precedence or target bytes before observation, replace input bytes with display strings, or manufacture expected success. Set/read back database collation explicitly in owned isolated databases, preserve actual SQL and context for implicit declaration cases; never alter an unrelated database.",
+        "Four independent fresh databases on two owned pinned SQL Server containers, complete original raw request/response/semantic/native bytes/SQL UTF16 units/logical descriptors/diagnostics/completion/callback counts/original-session counters/atomicity/recovery. Independently validate emitted declarations, source omission/presence, metadata descriptors, bounded vsPLP ROW bytes and NULL prefixes. Source acquisition script retained/hash before pin edits, original artifact immutable; final frozen-source independent four-database reproduction and full raw recursive path/value comparison retained without sorting or normalization. Identity projections only explicit checked digest inputs; all raw identity differences preserved.",
+        "Reuse reviewed unchanged lifecycle/bulk/trace helpers and existing JS reference workspace/cache; no native builds, canonical builder writes, new agents/worktrees/cache duplication. Bound inputs/JSON/nodes/depth/packet counts/aggregate payload/connection/request/bulk callback times; guard exclusive outputs before Docker; persist bounded raw failures and explicit omission sidecars before validation; await cleanup of only attributable containers/databases/jobs. Credentials/login packets excluded. Focused meaningful corruption/resource/abort/cleanup tests both hosts, boolean bounded failure reporting for large captures and sidecars; no whole near48MiB assertion operands.",
+        "Fresh own exclusive claim and receipt in existing worker worktree. Exact four new paths only; no older fixture/helper/core/root/catalog/engine changes or runtime claims. Describe measured source/wire/target/default policy only after final reproduction, and explicit fixedCHAR/NCHAR/legacy/arbitrary-collation/nonmeasured shape frontier. Own focused PR through independent review, verified exact-head Codex review or owner availability fallback, requiredCI, merge, prompt issue/project/registry Done. This reference is a predecessor of actual encoding integration, not compatibility completion."
+      ],
+      "issue": 956,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmltS"
     }
   ]
 }
