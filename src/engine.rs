@@ -988,8 +988,10 @@ impl Session {
             return Ok(CrossDatabase::Local);
         };
         let display = |alias: &str| self.database.catalog().display_name(alias);
-        // Like SQL Server, a missing object of another database is an
-        // invalid object name.
+        // Access to each database is checked first, as USE checks it (924
+        // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
+        // object of another database is an invalid object name.
+        drop(self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?);
         for name in &relations.foreign_names {
             if let Some((alias, local)) =
                 crate::query_catalog::foreign_relation(&self.db, &relations.current, name)?

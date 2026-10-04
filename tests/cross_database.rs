@@ -296,6 +296,8 @@ fn single_user_databases_admit_only_their_user() {
         .0,
         924
     );
+    // Access is checked before the object, as SQL Server does.
+    assert_eq!(fails(&mut other, "SELECT id FROM solo.dbo.missing").0, 924);
     ok(&mut owner, "SELECT id FROM solo.dbo.t");
     assert_eq!(catalog(&other), "memory.dbo");
     // A statement in progress keeps the database in use, like USE.
