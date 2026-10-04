@@ -12178,6 +12178,24 @@
       ],
       "issue": 970,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnBxY"
+    },
+    {
+      "id": "stored-default-write-adapters-v1",
+      "title": "Parse stored MERGE and UPDATE defaults with the backend dialect",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal. First-party full gaps_computed regression progresses past INSERT after dialect fix, then fails unchanged MERGE with identical stored CASE/STRUCT parser error. Source inspection finds the same backend-catalog GenericDialect mismatch in UPDATE DEFAULT. Companion claim970 owns raw-unit write regressions; bounded disjoint files, same root worker/cache, no engine.rs or unrelated trigger work.",
+      "scope": [
+        "src/update.rs",
+        "src/engine/ext/merge/target.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Parse only DuckDB serialized catalog defaults in MERGE and UPDATE with DuckDbDialect. Preserve other parsing and assignment/storage/identity/atomicity behavior.",
+        "Existing full gaps_computed file and native companion970 raw-unit tests must cover MERGE omitted/default assignment and UPDATE DEFAULT; record predecessor failures without weakening tests.",
+        "Reuse existing rootworker/worktree/Linux lock/cache. Combine PR964 and execute all exacthead required Rust/client/audit/review/CI gates; merge and complete registry/issue/project."
+      ],
+      "issue": 971,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnB_8"
     }
   ]
 }
