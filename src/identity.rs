@@ -192,13 +192,66 @@ fn references_sequence(default: &str, name: &str, bindings: &[(String, String)])
     Ok(found)
 }
 
+fn references_bound_macro(default: &str, macros: &[(String, String)]) -> Result<bool> {
+    if macros.is_empty() {
+        return Ok(false);
+    }
+    let mut parser = Parser::new(&GenericDialect {}).try_with_sql(default)?;
+    let expr = parser.parse_expr()?;
+    ensure!(
+        parser.peek_token().token == sqlparser::tokenizer::Token::EOF,
+        "Unsupported native default dependency syntax"
+    );
+    let mut found = false;
+    let _ = visit_expressions(&expr, |expr| {
+        if let Expr::Function(function) = expr {
+            let mut parts = function
+                .name
+                .0
+                .iter()
+                .rev()
+                .filter_map(ObjectNamePart::as_ident);
+            if let Some(name) = parts.next() {
+                let schema = parts.next();
+                found = macros.iter().any(|(bound_schema, bound_name)| {
+                    name.value.eq_ignore_ascii_case(bound_name)
+                        && schema
+                            .is_none_or(|schema| schema.value.eq_ignore_ascii_case(bound_schema))
+                });
+                if found {
+                    return std::ops::ControlFlow::Break(());
+                }
+            }
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    Ok(found)
+}
+
 /// Live column defaults referring to a private sequence. No sequence is read or advanced.
 pub(crate) fn dependent_columns(
     db: &Connection,
     name: &str,
 ) -> Result<Vec<(String, String, String)>> {
+    let expected = sequence_key(name, "")?;
+    let opaque: i64 = db.query_row("SELECT count(*) FROM duckdb_dependencies() d JOIN duckdb_sequences() s ON d.objid=s.sequence_oid LEFT JOIN duckdb_tables() t ON d.refobjid=t.table_oid AND t.database_oid=s.database_oid WHERE s.database_name=current_database() AND s.schema_name=? COLLATE NOCASE AND s.sequence_name=? COLLATE NOCASE AND t.table_oid IS NULL", [&expected.0,&expected.1], |row| row.get(0))?;
+    ensure!(
+        opaque == 0,
+        "Unsupported bound private sequence dependent object"
+    );
     let mut dependencies = db.prepare("SELECT DISTINCT t.schema_name,t.table_name,s.schema_name,s.sequence_name FROM duckdb_dependencies() d JOIN duckdb_sequences() s ON d.objid=s.sequence_oid JOIN duckdb_tables() t ON d.refobjid=t.table_oid AND t.database_oid=s.database_oid WHERE t.database_name=current_database()")?;
     let bindings = dependencies
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    let mut macro_dependencies = db.prepare("SELECT DISTINCT t.schema_name,t.table_name,f.schema_name,f.function_name FROM duckdb_dependencies() d JOIN duckdb_functions() f ON d.objid=f.function_oid JOIN duckdb_tables() t ON d.refobjid=t.table_oid WHERE t.database_name=current_database() AND f.function_type='macro'")?;
+    let macros = macro_dependencies
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -226,8 +279,38 @@ pub(crate) fn dependent_columns(
             })
             .map(|(_, _, schema, name)| (schema.clone(), name.clone()))
             .collect::<Vec<_>>();
+        if table_bindings.iter().any(|(schema, name)| {
+            schema.eq_ignore_ascii_case(&expected.0) && name.eq_ignore_ascii_case(&expected.1)
+        }) {
+            let table_macros = macros
+                .iter()
+                .filter(|(schema, name, _, _)| {
+                    schema.eq_ignore_ascii_case(&table_schema) && name.eq_ignore_ascii_case(&table)
+                })
+                .map(|(_, _, schema, name)| (schema.clone(), name.clone()))
+                .collect::<Vec<_>>();
+            ensure!(
+                !references_bound_macro(&default, &table_macros)?,
+                "Unsupported bound macro private sequence default dependency"
+            );
+        }
         if references_sequence(&default, name, &table_bindings)? {
             dependents.push((table_schema, table, column));
+        }
+    }
+    for (schema, table, sequence_schema, sequence) in &bindings {
+        if sequence_schema.eq_ignore_ascii_case(&expected.0)
+            && sequence.eq_ignore_ascii_case(&expected.1)
+        {
+            ensure!(
+                dependents
+                    .iter()
+                    .any(|(dependent_schema, dependent_table, _)| {
+                        schema.eq_ignore_ascii_case(dependent_schema)
+                            && table.eq_ignore_ascii_case(dependent_table)
+                    }),
+                "Unsupported unattributed bound private sequence dependency"
+            );
         }
     }
     Ok(dependents)
@@ -554,6 +637,143 @@ pub fn create(db: &Connection, statement: &Statement, autocommit: bool) -> Resul
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn opaque_bound_macro_defaults_preserve_destructive_ddl_atomicity() {
+        for same_table in [false, true] {
+            for expression in ["main.hidden()", "coalesce(main.hidden(),1)+1"] {
+                let db = Connection::open_in_memory().unwrap();
+                db.execute_batch("CREATE SCHEMA dbo").unwrap();
+                let parse = |sql: &str| {
+                    Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                        .unwrap()
+                        .remove(0)
+                };
+                create(
+                    &db,
+                    &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),v INT,keeper INT)"),
+                    true,
+                )
+                .unwrap();
+                db.execute_batch("INSERT INTO dbo.ids(v,keeper) VALUES(1,7)")
+                    .unwrap();
+                let name = table_sequences(
+                    &db,
+                    &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+                )
+                .unwrap()
+                .remove(0);
+                db.execute_batch(&format!("CREATE MACRO main.hidden() AS nextval('{name}')"))
+                    .unwrap();
+                if same_table {
+                    db.execute_batch(&format!(
+                        "ALTER TABLE dbo.ids ADD COLUMN hidden_value BIGINT DEFAULT ({expression})"
+                    ))
+                    .unwrap();
+                } else {
+                    db.execute_batch(&format!(
+                        "CREATE TABLE dbo.dep(d BIGINT DEFAULT ({expression}))"
+                    ))
+                    .unwrap();
+                }
+                let allocation: i64 = db
+                    .query_row("SELECT last_value FROM duckdb_sequences()", [], |row| {
+                        row.get(0)
+                    })
+                    .unwrap();
+                db.execute_batch("BEGIN").unwrap();
+                let error = dependent_columns(&db, &name).unwrap_err();
+                assert!(error.to_string().contains("Unsupported bound macro"));
+                let Statement::AlterTable(mut drop) = parse("ALTER TABLE dbo.ids DROP COLUMN v")
+                else {
+                    panic!()
+                };
+                let Statement::AlterTable(id) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+                    panic!()
+                };
+                drop.operations.extend(id.operations);
+                assert!(crate::table_alter::execute(&db, &drop, false).is_err());
+                assert!(drop_table(&db, &parse("DROP TABLE dbo.ids"), false).is_err());
+                assert_eq!(
+                    db.query_row("SELECT id,v,keeper FROM dbo.ids", [], |row| Ok((
+                        row.get::<_, i32>(0)?,
+                        row.get::<_, i32>(1)?,
+                        row.get::<_, i32>(2)?
+                    )))
+                    .unwrap(),
+                    (10, 1, 7)
+                );
+                assert_eq!(
+                    db.query_row("SELECT last_value FROM duckdb_sequences()", [], |row| row
+                        .get::<_, i64>(
+                        0
+                    ))
+                    .unwrap(),
+                    allocation
+                );
+                let Statement::AlterTable(unrelated) = parse("ALTER TABLE dbo.ids DROP COLUMN v")
+                else {
+                    panic!()
+                };
+                crate::table_alter::execute(&db, &unrelated, false).unwrap();
+                db.execute_batch("ROLLBACK").unwrap();
+                assert_eq!(
+                    db.query_row("SELECT v FROM dbo.ids", [], |row| row.get::<_, i32>(0))
+                        .unwrap(),
+                    1
+                );
+                if same_table {
+                    db.execute_batch("ALTER TABLE dbo.ids DROP COLUMN hidden_value")
+                        .unwrap();
+                } else {
+                    db.execute_batch("DROP TABLE dbo.dep").unwrap();
+                }
+                drop_table(&db, &parse("DROP TABLE dbo.ids"), true).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_builtin_defaults_allow_identity_removal() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let parse = |sql: &str| {
+            Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                .unwrap()
+                .remove(0)
+        };
+        create(
+            &db,
+            &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),keeper INT)"),
+            true,
+        )
+        .unwrap();
+        db.execute_batch("INSERT INTO dbo.ids(keeper) VALUES(7); ALTER TABLE dbo.ids ADD COLUMN magnitude INT DEFAULT abs(-3); ALTER TABLE dbo.ids ADD COLUMN units INT DEFAULT length('abc'); ALTER TABLE dbo.ids ADD COLUMN at_time TIMESTAMP DEFAULT current_timestamp").unwrap();
+        let Statement::AlterTable(drop) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+            panic!()
+        };
+        crate::table_alter::execute(&db, &drop, true).unwrap();
+        assert_eq!(
+            db.query_row(
+                "SELECT keeper,magnitude,units,at_time IS NOT NULL FROM dbo.ids",
+                [],
+                |row| Ok((
+                    row.get::<_, i32>(0)?,
+                    row.get::<_, i32>(1)?,
+                    row.get::<_, i32>(2)?,
+                    row.get::<_, bool>(3)?
+                ))
+            )
+            .unwrap(),
+            (7, 3, 3, true)
+        );
+        assert_eq!(
+            db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
     #[test]
     fn currval_dependencies_preflight_before_destructive_ddl() {
         for qualified in [true, false] {
