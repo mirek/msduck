@@ -10682,7 +10682,7 @@
     {
       "id": "v025-cross-database-v1",
       "title": "Resolve cross-database three-part names for reads and joins",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content.",
       "scope": [
         "src/engine.rs",
@@ -11244,7 +11244,7 @@
     {
       "id": "v025-cross-database-v1-operands",
       "title": "Operand metadata for relations in other databases",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-cross-database-v1: statements that join the current database with another one need the other database's column declarations for operand binding (LEN, concatenation, comparisons of nvarchar carriers), which are acquired in this root adapter; shipped in the same PR.",
       "scope": [
         "src/aggregate_columns/catalog.rs"
@@ -11259,7 +11259,7 @@
     {
       "id": "v025-cross-database-v1-docs",
       "title": "Cross-database test and documentation follow-up",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-cross-database-v1: the existing tedious test asserts the removed cross-database refusal, and README and the msdb limits describe it; shipped in the same PR.",
       "scope": [
         "tests/databases.test.mjs",
