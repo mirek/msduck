@@ -11900,7 +11900,7 @@
     {
       "id": "bulk-character-source-row-limits-runtime-v1",
       "title": "Admit BulkLoad character ROWs by declared source limits rather than wire width",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party final task950 independently reviewed original and reproduced oracle: all eight fresh databases agree that modern bounded ROW payloads may exceed advertised0/1 wire width if they fit the declared source width. Existing codec prematurely rejects those successful requests. Work begins only after950 merges/Done and this task is ready; no third-party inputs.",
       "scope": [
         "crates/msduck-tds/src/bulk_load.rs",
