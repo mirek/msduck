@@ -11734,7 +11734,7 @@
     {
       "id": "bulk-character-utf8-capacity-reference-v1",
       "title": "Capture UTF8 source capacity and fixed padding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server compatibility goal and explicit preference for2-3 parallel workers with bounded disk use. First-party capacity core914/921 and native adapter938 expose unsupported UTF8 sources; completed source-form918 and bounded-target919 fit every target and cannot establish overflow. Publish a disjoint capture-only companion while root owns native938 exact-head verification; no external input approved.",
       "scope": [
         "scripts/capture-bulk-character-utf8-capacity.mjs",
