@@ -53,10 +53,231 @@ pub(super) fn run(
         Statement::Update(_) => Some(0xc5),
         _ => None,
     };
+    let texts = texts(statement, parameters);
     let result = ext::reenter(session, "keys", |session| {
         session.execute(statement.clone(), parameters)
     });
-    result.map_err(|error| translate(session, target.as_ref(), command, error))
+    result.map_err(|error| translate(session, target.as_ref(), command, &texts, error))
+}
+
+/// The character values a statement writes, by target column where the
+/// statement shows it. Character keys drop trailing spaces and, under a
+/// case-insensitive collation, fold case in the value DuckDB reports; SQL
+/// Server shows the value as written, which is recovered from these
+/// ([`written`]).
+#[derive(Default)]
+struct Texts {
+    /// INSERT ... VALUES or SELECT rows.
+    rows: Option<Rows>,
+    /// UPDATE: the text values assigned to each (lowercase) column.
+    assigned: Option<HashMap<String, Vec<String>>>,
+    /// Other statements: every string literal and text parameter.
+    any: Vec<String>,
+}
+
+/// The rows an INSERT writes, from VALUES or SELECT lists.
+struct Rows {
+    /// The target column names; `None`: the table's columns in order.
+    columns: Option<Vec<String>>,
+    /// Each row's text values, by position.
+    values: Vec<Vec<Option<String>>>,
+}
+
+impl Texts {
+    /// The values written to the key column `name`, the table's column
+    /// number `ordinal`.
+    fn of(&self, name: &str, ordinal: Option<usize>) -> Vec<&String> {
+        if let Some(Rows { columns, values }) = &self.rows {
+            let index = match columns {
+                Some(columns) => columns.iter().position(|c| c.eq_ignore_ascii_case(name)),
+                None => ordinal,
+            };
+            return index
+                .map(|index| {
+                    values
+                        .iter()
+                        .filter_map(|row| row.get(index).and_then(Option::as_ref))
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
+        if let Some(assigned) = &self.assigned {
+            return assigned
+                .get(&name.to_lowercase())
+                .map(|values| values.iter().collect())
+                .unwrap_or_default();
+        }
+        self.any.iter().collect()
+    }
+}
+
+fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Texts {
+    use sqlparser::ast::{AssignmentTarget, Expr, SetExpr, Value, Visit, Visitor};
+    let parameter = |name: &str| -> Option<String> {
+        match &parameters.get(&name.to_lowercase())?.value {
+            msduck_core::value::Value::Text(text) => Some(text.clone()),
+            msduck_core::value::Value::Unicode(units) => Some(String::from_utf16_lossy(units)),
+            _ => None,
+        }
+    };
+    let single = |expr: &Expr| -> Option<String> {
+        let mut expr = expr;
+        while let Expr::Nested(inner) = expr {
+            expr = inner;
+        }
+        match expr {
+            Expr::Value(value) => match &value.value {
+                Value::SingleQuotedString(text) | Value::NationalStringLiteral(text) => {
+                    Some(text.clone())
+                }
+                _ => None,
+            },
+            Expr::Identifier(ident) if ident.value.starts_with('@') => parameter(&ident.value),
+            _ => None,
+        }
+    };
+    struct Find(Vec<String>);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            if let Expr::Value(value) = expr
+                && let Value::SingleQuotedString(text) | Value::NationalStringLiteral(text) =
+                    &value.value
+            {
+                self.0.push(text.clone());
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut texts = Texts::default();
+    match statement {
+        Statement::Insert(insert) => {
+            // The rows of VALUES, or of SELECT lists (UNION ALL arms too), by
+            // position; `None` when the source has another shape.
+            fn rows(
+                body: &SetExpr,
+                single: &dyn Fn(&Expr) -> Option<String>,
+                out: &mut Vec<Vec<Option<String>>>,
+            ) -> Option<()> {
+                match body {
+                    SetExpr::Values(values) => {
+                        out.extend(
+                            values
+                                .rows
+                                .iter()
+                                .map(|row| row.iter().map(single).collect()),
+                        );
+                        Some(())
+                    }
+                    SetExpr::Select(select) => {
+                        let row = select
+                            .projection
+                            .iter()
+                            .map(|item| match item {
+                                sqlparser::ast::SelectItem::UnnamedExpr(expr)
+                                | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => {
+                                    Some(single(expr))
+                                }
+                                _ => None,
+                            })
+                            .collect::<Option<Vec<_>>>()?;
+                        out.push(row);
+                        Some(())
+                    }
+                    SetExpr::SetOperation { left, right, .. } => {
+                        rows(left, single, out)?;
+                        rows(right, single, out)
+                    }
+                    SetExpr::Query(query) => rows(&query.body, single, out),
+                    _ => None,
+                }
+            }
+            let mut values = vec![];
+            if let Some(source) = &insert.source
+                && rows(source.body.as_ref(), &single, &mut values).is_some()
+            {
+                let columns = (!insert.columns.is_empty()).then(|| {
+                    insert
+                        .columns
+                        .iter()
+                        .map(|c| {
+                            c.0.last()
+                                .and_then(|part| part.as_ident())
+                                .map(|ident| ident.value.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect()
+                });
+                texts.rows = Some(Rows { columns, values });
+                return texts;
+            }
+        }
+        // An UPDATE writes its SET values; its other literals select rows.
+        Statement::Update(update) => {
+            let mut assigned: HashMap<String, Vec<String>> = HashMap::new();
+            for assignment in &update.assignments {
+                let AssignmentTarget::ColumnName(name) = &assignment.target else {
+                    continue;
+                };
+                let Some(column) = name.0.last().and_then(|part| part.as_ident()) else {
+                    continue;
+                };
+                let mut find = Find(vec![]);
+                let _ = assignment.value.visit(&mut find);
+                find.0.extend(single(&assignment.value).filter(|_| {
+                    matches!(&assignment.value, Expr::Identifier(i) if i.value.starts_with('@'))
+                }));
+                assigned
+                    .entry(column.value.to_lowercase())
+                    .or_default()
+                    .extend(find.0);
+            }
+            texts.assigned = Some(assigned);
+            return texts;
+        }
+        _ => {}
+    }
+    let mut find = Find(vec![]);
+    let _ = statement.visit(&mut find);
+    let mut names: Vec<&String> = parameters.keys().collect();
+    names.sort();
+    find.0
+        .extend(names.into_iter().filter_map(|name| parameter(name)));
+    texts.any = find.0;
+    texts
+}
+
+/// The display of a key value as written: the last written value with that
+/// key (keys drop trailing spaces and fold case), or `None` when none has it.
+fn written(column: &value::Column, raw: &str, texts: &[&String]) -> Option<String> {
+    use value::Storage;
+    let hex = |bytes: &[u8]| -> String { bytes.iter().map(|b| format!("{b:02X}")).collect() };
+    let text = match column.kind().ok()? {
+        Storage::Unicode => texts
+            .iter()
+            .rev()
+            .find(|text| column.unicode_key_of(text) == raw)
+            .map(|text| {
+                hex(&text
+                    .encode_utf16()
+                    .flat_map(u16::to_le_bytes)
+                    .collect::<Vec<_>>())
+            }),
+        Storage::Ansi => texts
+            .iter()
+            .rev()
+            .find(|text| {
+                let key = if column.case_insensitive() {
+                    text.to_lowercase()
+                } else {
+                    (**text).clone()
+                };
+                hex(key.trim_end_matches(' ').as_bytes()) == raw
+            })
+            .map(|text| hex(text.as_bytes())),
+        _ => None,
+    }?;
+    Some(column.display(&text, true))
 }
 
 /// Replace a DuckDB duplicate-key error with SQL Server's, keeping the
@@ -65,13 +286,14 @@ fn translate(
     session: &Session,
     target: Option<&ObjectName>,
     command: Option<u16>,
+    texts: &Texts,
     error: anyhow::Error,
 ) -> anyhow::Error {
     let error = match error.downcast::<ext::Partial>() {
         Ok(partial) => {
             return ext::Partial {
                 tokens: partial.tokens,
-                error: translate(session, target, command, partial.error),
+                error: translate(session, target, command, texts, partial.error),
             }
             .into();
         }
@@ -89,7 +311,7 @@ fn translate(
     let failed_context = error
         .downcast_ref::<crate::query_error::FailedQuery>()
         .map(|failed| (failed.metadata.clone(), failed.command));
-    let describe = |db: &Connection| describe(db, target, &text, &duplicate);
+    let describe = |db: &Connection| describe(db, target, &text, &duplicate, texts);
     // A failed statement can abort the DuckDB transaction; read the
     // committed catalog through a separate connection then.
     let described = describe(&session.db).or_else(|_| {
@@ -127,12 +349,13 @@ fn describe(
     target: Option<&ObjectName>,
     text: &str,
     duplicate: &Duplicate,
+    texts: &Texts,
 ) -> Result<Option<Diagnostic>> {
     let table = match target {
         Some(name) => tables::resolve(db, name)?,
         None => None,
     };
-    if let Some(found) = managed(db, table.as_ref(), duplicate)? {
+    if let Some(found) = managed(db, table.as_ref(), duplicate, texts)? {
         return Ok(Some(found));
     }
     let Some(table) = table else {
@@ -146,6 +369,7 @@ fn managed(
     db: &Connection,
     table: Option<&tables::Table>,
     duplicate: &Duplicate,
+    texts: &Texts,
 ) -> Result<Option<Diagnostic>> {
     let Some(tag) = duplicate.tag() else {
         return Ok(None);
@@ -167,12 +391,31 @@ fn managed(
     else {
         return Ok(None);
     };
-    let Some(values) = duplicate
-        .managed_values(value::component_count(&columns))
-        .and_then(|values| value::managed_values(&columns, &values))
-    else {
+    let Some(raw) = duplicate.managed_values(value::component_count(&columns)) else {
         return Ok(None);
     };
+    let Some(mut values) = value::managed_values(&columns, &raw) else {
+        return Ok(None);
+    };
+    // The key value of each column follows its NULL discriminator, if any.
+    let mut position = 0;
+    for (column, shown) in columns.iter().zip(values.iter_mut()) {
+        if column.nullable {
+            position += 1;
+        }
+        let ordinal = owner
+            .columns
+            .iter()
+            .position(|c| c.name.eq_ignore_ascii_case(&column.name));
+        if shown != "<NULL>"
+            && let Some(written) = raw
+                .get(position)
+                .and_then(|r| written(column, r, &texts.of(&column.name, ordinal)))
+        {
+            *shown = written;
+        }
+        position += 1;
+    }
     Ok(Some(message::violation(
         key.message_kind(),
         &key.name,

@@ -4,9 +4,10 @@
 //! SQL Server accepts only simple filters: conjunctions of
 //! `column comparison constant`, `column IS [NOT] NULL` and
 //! `column IN (constant, ...)`. Comparisons follow the column's storage:
-//! Unicode carriers compare BIN2 equality keys (ordering comparisons are not
+//! Unicode carriers compare equality keys (ordering comparisons are not
 //! supported), temporal structs compare UTC ticks and ANSI text ignores
-//! trailing spaces for equality. Only built-in DuckDB functions appear, so
+//! trailing spaces for equality. Character equality follows the column's
+//! collation, case-insensitively for the database default. Only built-in DuckDB functions appear, so
 //! the index binds while DuckDB replays its WAL.
 use super::value::{Column, Storage};
 use msduck_core::{datetime2::DateTime2, datetimeoffset::DateTimeOffset};
@@ -107,12 +108,19 @@ fn comparison(column: &Column, op: &str, value: Constant) -> Result<String, Erro
         // they cannot order UTF-16 code units.
         Storage::Unicode if matches!(op, "=" | "<>") => format!(
             "({} {op} '{}')",
-            super::value::unicode_key(&q),
-            super::value::unicode_key_of(&text)
+            column.unicode_key(),
+            column.unicode_key_of(&text)
         ),
         Storage::Unicode => return Err(Error::Unsupported),
         // Text constants are hexadecimal, so no user text appears in the
         // index expression or in DuckDB's duplicate-key message.
+        Storage::Ansi if matches!(op, "=" | "<>") && column.case_insensitive() => {
+            format!(
+                "({} {op} hex(rtrim(lower({}), ' ')))",
+                column.ansi_key(),
+                varchar(&text)
+            )
+        }
         Storage::Ansi if matches!(op, "=" | "<>") => {
             format!(
                 "(hex(rtrim({q}, ' ')) {op} '{}')",
@@ -236,6 +244,7 @@ mod tests {
             scale: 3,
             nullable: true,
             storage: storage.into(),
+            collation: Some("Latin1_General_100_BIN2".into()),
         };
         vec![
             column("email", 231, "STRUCT(__msduck_utf16le BLOB)"),
@@ -281,6 +290,21 @@ mod tests {
             lower(&predicate("email > N'a'"), &columns),
             Err(Error::Unsupported)
         );
+        // The database default compares case-insensitively.
+        let mut default = columns.clone();
+        for column in &mut default {
+            column.collation = None;
+        }
+        assert_eq!(
+            lower(&predicate("code = 'A'"), &default).unwrap(),
+            "(hex(rtrim(lower(\"code\"), ' ')) = hex(rtrim(lower(decode(from_hex('41'))), ' ')))"
+        );
+        let email = lower(&predicate("email <> N'AB '"), &default).unwrap();
+        assert!(
+            email.starts_with("(regexp_replace(replace(regexp_replace("),
+            "{email}"
+        );
+        assert!(email.ends_with(" <> '61006200')"), "{email}");
         assert!(
             lower(&predicate("at >= '2024-01-02'"), &columns)
                 .unwrap()

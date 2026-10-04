@@ -32,6 +32,11 @@ impl Collation {
     pub fn for_name(name: &str) -> Option<Self> {
         let (flags, version, sort_id) = match name.to_ascii_lowercase().as_str() {
             "sql_latin1_general_cp1_ci_as" => (13, 0, 52),
+            "sql_latin1_general_cp1_cs_as" => (12, 0, 51),
+            "latin1_general_ci_as" => (13, 0, 0),
+            "latin1_general_cs_as" => (12, 0, 0),
+            "latin1_general_ci_ai" => (15, 0, 0),
+            "latin1_general_bin2" => (32, 0, 0),
             "latin1_general_ci_as_ks_ws" => (1, 0, 0),
             "latin1_general_100_ci_as" => (13, 2, 0),
             "latin1_general_100_cs_as" => (12, 2, 0),
@@ -83,6 +88,42 @@ mod tests {
             "Latin1_General_100_CI_AS_SC_UTF8",
         ] {
             assert!(Collation::for_name(name).is_none());
+        }
+    }
+
+    #[test]
+    fn column_collation_descriptors_match_reference() {
+        let reference: serde_json::Value =
+            serde_json::from_str(include_str!("../../../reference/default-collation.json"))
+                .unwrap();
+        let case = reference["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["group"] == "columns" && case["name"] == "catalog")
+            .unwrap();
+        let names: Vec<String> = case["sets"][0]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|row| row[1].as_str().map(str::to_owned))
+            .collect();
+        let columns = case["sets"][1]["columns"].as_array().unwrap();
+        assert_eq!(names.len(), columns.len());
+        for (name, column) in names.iter().zip(columns) {
+            let expected = &column["collation"];
+            let descriptor = Collation::new(
+                expected["lcid"].as_u64().unwrap() as u32,
+                expected["flags"].as_u64().unwrap() as u8,
+                expected["version"].as_u64().unwrap() as u8,
+                expected["sortId"].as_u64().unwrap() as u8,
+            )
+            .unwrap();
+            assert_eq!(
+                Collation::descriptor_for_name(name),
+                Some(descriptor),
+                "{name}"
+            );
         }
     }
 

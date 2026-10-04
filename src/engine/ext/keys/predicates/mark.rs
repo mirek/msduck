@@ -10,8 +10,13 @@
 //! operations as Unicode text without the dispatch.
 use super::catalog::{Catalog, Resolution};
 use super::lower::{MARK, MAYBE, MEMBER};
+use crate::engine::Parameter;
+use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::*;
+use std::collections::HashMap;
 use std::ops::ControlFlow;
+
+type Parameters = HashMap<String, Parameter>;
 
 fn marked(expr: &Expr) -> bool {
     matches!(expr, Expr::Function(f) if f.name.to_string() == MARK)
@@ -130,14 +135,230 @@ fn collated(expr: &Expr) -> bool {
     }
 }
 
+/// What [`collate`] did with an operation.
+enum Collated {
+    /// No operand is a column with a rule of its own.
+    No,
+    /// Its column operands now carry their collation explicitly.
+    Wrapped,
+    /// Columns of different collations meet: their names, in operand order.
+    Conflict(String, String),
+}
+
+/// Give the column operands of an operation their declared collation as an
+/// explicit COLLATE, when its rule differs from the database default: SQL
+/// Server's implicit column collation then wins over literals and
+/// variables, and the explicit COLLATE lowering applies it. Columns of
+/// different collations (by name, even when they compare alike) conflict.
+fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
+    let name = match columns_collation(catalog, operands.iter().map(|o| &**o)) {
+        Err((left, right)) => return Collated::Conflict(left, right),
+        Ok(name) => name,
+    };
+    let Some(name) = name.filter(|name| own(name)) else {
+        return Collated::No;
+    };
+    for operand in operands.iter_mut() {
+        if catalog.textual(operand) && catalog.collation(operand).is_some() {
+            let inner = std::mem::replace(&mut **operand, Expr::Value(Value::Null.into()));
+            **operand = Expr::Collate {
+                expr: Box::new(inner),
+                collation: ObjectName::from(vec![Ident::new(name.clone())]),
+            };
+        }
+    }
+    Collated::Wrapped
+}
+
+/// Whether `expr` calls a function that gives a new value on each call. A
+/// simple CASE over it cannot become comparisons that each evaluate it.
+fn volatile(expr: &Expr) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            match expr {
+                Expr::Function(f)
+                    if matches!(
+                        f.name.to_string().to_ascii_uppercase().as_str(),
+                        "NEWID" | "NEWSEQUENTIALID" | "RAND" | "CRYPT_GEN_RANDOM"
+                    ) =>
+                {
+                    ControlFlow::Break(())
+                }
+                _ => ControlFlow::Continue(()),
+            }
+        }
+    }
+    expr.visit(&mut Find).is_break()
+}
+
+/// SQL Server's name for the collation operation of a comparison operator.
+fn operation(op: &BinaryOperator) -> Option<&'static str> {
+    Some(match op {
+        BinaryOperator::Eq => "equal to",
+        BinaryOperator::NotEq => "not equal to",
+        BinaryOperator::Lt => "less than",
+        BinaryOperator::Gt => "greater than",
+        BinaryOperator::LtEq => "less than or equal to",
+        BinaryOperator::GtEq => "greater than or equal to",
+        _ => return None,
+    })
+}
+
+/// The collation of an operation's character column operands, or the first
+/// two names that differ (in operand order).
+fn columns_collation<'a>(
+    catalog: &Catalog,
+    operands: impl Iterator<Item = &'a Expr>,
+) -> Result<Option<String>, (String, String)> {
+    use msduck_sql::dialect::ext::keys::collation::DEFAULT;
+    let mut name: Option<String> = None;
+    for operand in operands {
+        let Some(found) = catalog.agreed_collation(operand) else {
+            continue;
+        };
+        let found = found.unwrap_or(DEFAULT);
+        match &name {
+            Some(existing) if !existing.eq_ignore_ascii_case(found) => {
+                return Err((existing.clone(), found.to_owned()));
+            }
+            _ => name = Some(found.to_owned()),
+        }
+    }
+    Ok(name)
+}
+
+/// SQL Server's 468 for an operation over differently collated columns.
+fn conflict(operation: &str, left: &str, right: &str) -> SqlError {
+    SqlError::new(
+        468,
+        9,
+        format!(
+            "Cannot resolve the collation conflict between \"{right}\" and \"{left}\" in the {operation} operation."
+        ),
+    )
+}
+
+/// Whether a collation compares differently from the database default.
+fn own(name: &str) -> bool {
+    use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+    sensitivity(name) == Some(Sensitivity::Other)
+}
+
+/// The column's collation when it compares differently from the default.
+fn own_collation<'a>(catalog: &'a Catalog, expr: &Expr) -> Option<&'a str> {
+    catalog.collation(expr).filter(|name| own(name))
+}
+
+/// Whether `expr` is known to be character data: a text column, a string
+/// literal, a character variable or parameter, or a character function or
+/// conversion of such text.
+fn text(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    use msduck_core::types::Type;
+    match expr {
+        Expr::Nested(inner) => text(catalog, parameters, inner),
+        Expr::Value(value) => matches!(
+            value.value,
+            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
+        ),
+        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
+            .get(&ident.value.to_lowercase())
+            .is_some_and(|parameter| {
+                matches!(
+                    parameter.data_type,
+                    Type::Character(_) | Type::Text | Type::Ntext
+                )
+            }),
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.textual(expr),
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => {
+            matches!(
+                msduck_sql::sql_type::declaration(data_type),
+                Ok(Type::Character(_) | Type::Text | Type::Ntext)
+            )
+        }
+        Expr::Function(f) => {
+            let name = f.name.to_string().to_ascii_uppercase();
+            name == "CONCAT"
+                || matches!(
+                    name.as_str(),
+                    "LEFT"
+                        | "RIGHT"
+                        | "UPPER"
+                        | "LOWER"
+                        | "LTRIM"
+                        | "RTRIM"
+                        | "TRIM"
+                        | "SUBSTRING"
+                        | "REPLACE"
+                        | "REVERSE"
+                        | "ISNULL"
+                        | "COALESCE"
+                ) && first_argument(f).is_some_and(|a| text(catalog, parameters, a))
+        }
+        _ => unicode(catalog, expr),
+    }
+}
+
+/// Whether `expr` is known to be non-Unicode character data: a CHAR or
+/// VARCHAR column, a string literal without N, or such a variable.
+fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
+    use msduck_core::character::Family;
+    use msduck_core::types::Type;
+    match expr {
+        Expr::Nested(inner) => ansi(catalog, parameters, inner),
+        Expr::Value(value) => matches!(value.value, Value::SingleQuotedString(_)),
+        Expr::Identifier(ident) if ident.value.starts_with('@') => parameters
+            .get(&ident.value.to_lowercase())
+            .is_some_and(|parameter| {
+                matches!(parameter.data_type, Type::Text)
+                    || matches!(parameter.data_type, Type::Character(c)
+                        if matches!(c.family(), Family::Char | Family::Varchar))
+            }),
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.ansi(expr),
+        _ => false,
+    }
+}
+
+/// An operand already wrapped in RTRIM by the ANSI ordering rule.
+fn trimmed(expr: &Expr) -> bool {
+    matches!(expr, Expr::Function(f) if f.name.to_string() == "RTRIM")
+}
+
+/// An operand [`literals`] already turned into `LOWER(RTRIM(…))`.
+fn ansi_keyed(expr: &Expr) -> bool {
+    let name =
+        |e: &Expr, wanted: &str| matches!(e, Expr::Function(f) if f.name.to_string() == wanted);
+    name(expr, "LOWER")
+        && matches!(expr, Expr::Function(f) if matches!(&f.args, FunctionArguments::List(list)
+            if matches!(list.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] if name(inner, "RTRIM"))))
+}
+
 /// Mark the operands of one operation when any of them is Unicode text;
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
 /// handling.
-fn mark(catalog: &Catalog, operands: Vec<&mut Expr>) {
+fn mark(
+    catalog: &Catalog,
+    _parameters: &Parameters,
+    operation: &str,
+    mut operands: Vec<&mut Expr>,
+) -> Result<(), SqlError> {
     if operands.iter().any(|o| collated(o) || marked(o)) {
-        return;
+        return Ok(());
     }
+    match collate(catalog, &mut operands) {
+        Collated::No => {}
+        Collated::Wrapped => return Ok(()),
+        // SQL Server's 468; binding reports it for queries, but DML
+        // predicates would otherwise compare the raw values.
+        Collated::Conflict(left, right) => return Err(conflict(operation, &left, &right)),
+    }
+
     // A subquery pass can type a column the statement pass could not.
     let unwrap = |e: &Expr| -> Expr {
         match e {
@@ -164,48 +385,262 @@ fn mark(catalog: &Catalog, operands: Vec<&mut Expr>) {
         let inner = unwrap(operand);
         *operand = msduck_sql::expr::unary_function(name, inner);
     }
+    Ok(())
 }
 
-pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
-    struct Mark<'a>(&'a Catalog);
-    impl VisitorMut for Mark<'_> {
+/// Mark one comparison, IN, BETWEEN, simple CASE or LIKE whose operands are
+/// all literals, variables or other character data known without a
+/// catalog, so it compares under the case-insensitive default collation.
+/// Statements and scalar evaluations alike reach this for every node.
+pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
+    let catalog = Catalog::default();
+    // NULLIF(a, b) becomes CASE WHEN a = b …; marking `b` alone keeps `a`,
+    // which gives the result its type, as written.
+    if let Expr::Function(f) = expr
+        && f.name.to_string().eq_ignore_ascii_case("NULLIF")
+    {
+        if let FunctionArguments::List(list) = &mut f.args
+            && let [
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(first)),
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(second)),
+            ] = list.args.as_mut_slice()
+            && [&*first, &*second]
+                .iter()
+                .all(|o| !collated(o) && !marked(o) && text(&catalog, parameters, o))
+        {
+            let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+            *second = msduck_sql::expr::unary_function(MARK, inner);
+        }
+        return;
+    }
+    let like = matches!(expr, Expr::Like { any: false, .. });
+    let operands: Vec<&mut Expr> = match expr {
+        Expr::BinaryOp {
+            left,
+            op:
+                BinaryOperator::Eq
+                | BinaryOperator::NotEq
+                | BinaryOperator::Lt
+                | BinaryOperator::Gt
+                | BinaryOperator::LtEq
+                | BinaryOperator::GtEq,
+            right,
+        } => vec![left, right],
+        Expr::Between {
+            expr, low, high, ..
+        } => vec![expr, low, high],
+        Expr::Like {
+            expr,
+            pattern,
+            any: false,
+            ..
+        } => vec![expr, pattern],
+        Expr::InList { expr, list, .. } => {
+            let mut operands = vec![expr.as_mut()];
+            operands.extend(list.iter_mut());
+            operands
+        }
+        Expr::Case {
+            operand: Some(operand),
+            conditions,
+            ..
+        } if !volatile(operand) => {
+            let mut operands = vec![operand.as_mut()];
+            operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
+            operands
+        }
+        _ => return,
+    };
+    if !operands
+        .iter()
+        .all(|o| !collated(o) && !marked(o) && text(&catalog, parameters, o))
+    {
+        return;
+    }
+    // ANSI comparisons ignore case and trailing spaces but no unit (CHAR(0)
+    // included), so they compare lowercased, right-trimmed text rather than
+    // the Unicode key.
+    if !like && operands.iter().all(|o| ansi_keyed(o)) {
+        return;
+    }
+    if !like && operands.iter().all(|o| ansi(&catalog, parameters, o)) {
+        for operand in operands {
+            let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+            *operand = msduck_sql::expr::unary_function(
+                "LOWER",
+                msduck_sql::expr::unary_function("RTRIM", inner),
+            );
+        }
+        return;
+    }
+    // ASCII pattern matching ignores the value's trailing blanks (the
+    // pattern's count); Unicode matching keeps them.
+    let ascii = like && operands.iter().all(|o| ansi(&catalog, parameters, o));
+    for (index, operand) in operands.into_iter().enumerate() {
+        let mut inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+        if ascii && index == 0 {
+            inner = msduck_sql::expr::unary_function("RTRIM", inner);
+        }
+        *operand = msduck_sql::expr::unary_function(MARK, inner);
+    }
+}
+
+/// Space-pad ANSI ordering comparisons (`<`, `>`, `<=`, `>=`, BETWEEN)
+/// whose operands are all CHAR or VARCHAR columns, literals or variables:
+/// trailing spaces never decide them, as SQL Server pads the shorter
+/// operand (equality and IN get this from ANSI padding). This pass runs on
+/// its own, without the Unicode marking.
+pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, node: &mut T) {
+    struct Pad<'a>(&'a Catalog, &'a Parameters);
+    impl VisitorMut for Pad<'_> {
         type Break = ();
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            match expr {
+            let operands: Vec<&mut Expr> = match expr {
                 Expr::BinaryOp {
                     left,
                     op:
-                        BinaryOperator::Eq
-                        | BinaryOperator::NotEq
-                        | BinaryOperator::Lt
+                        BinaryOperator::Lt
                         | BinaryOperator::Gt
                         | BinaryOperator::LtEq
                         | BinaryOperator::GtEq,
                     right,
-                } => mark(self.0, vec![left, right]),
+                } => vec![left, right],
                 Expr::Between {
                     expr, low, high, ..
-                } => mark(self.0, vec![expr, low, high]),
+                } => vec![expr, low, high],
+                _ => return ControlFlow::Continue(()),
+            };
+            if operands
+                .iter()
+                .any(|o| collated(o) || marked(o) || trimmed(o))
+                || !operands.iter().all(|o| ansi(self.0, self.1, o))
+                || own_collation_any(self.0, &operands)
+            {
+                return ControlFlow::Continue(());
+            }
+            for operand in operands {
+                let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+                *operand = msduck_sql::expr::unary_function("RTRIM", inner);
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters));
+}
+
+/// Whether an operand is a column with a collation of its own.
+fn own_collation_any(catalog: &Catalog, operands: &[&mut Expr]) -> bool {
+    operands.iter().any(|o| own_collation(catalog, o).is_some())
+}
+
+pub(super) fn rewrite<T: VisitMut>(
+    catalog: &Catalog,
+    parameters: &Parameters,
+    node: &mut T,
+) -> Result<(), SqlError> {
+    struct Mark<'a>(&'a Catalog, &'a Parameters);
+    impl VisitorMut for Mark<'_> {
+        type Break = SqlError;
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
+            let result = match expr {
+                Expr::BinaryOp { left, op, right } => match operation(op) {
+                    Some(operation) => mark(self.0, self.1, operation, vec![left, right]),
+                    None => Ok(()),
+                },
+                Expr::Between {
+                    expr, low, high, ..
+                } => mark(
+                    self.0,
+                    self.1,
+                    "greater than or equal to",
+                    vec![expr, low, high],
+                ),
                 // The escape stays as written: its checks look for a literal.
+                // LIKE over known character data matches with SQL Server's
+                // Unicode LIKE under the case-insensitive default.
                 Expr::Like {
                     expr,
                     pattern,
                     any: false,
                     ..
-                } => mark(self.0, vec![expr, pattern]),
+                } => {
+                    if let Err((left, right)) =
+                        columns_collation(self.0, [&**expr, &**pattern].into_iter())
+                        && ![&**expr, &**pattern].iter().any(|o| collated(o))
+                    {
+                        return ControlFlow::Break(conflict("like", &left, &right));
+                    }
+                    if [&**expr, &**pattern]
+                        .iter()
+                        .all(|o| !collated(o) && !marked(o) && text(self.0, self.1, o))
+                        && own_collation(self.0, expr).is_none()
+                        && own_collation(self.0, pattern).is_none()
+                    {
+                        // ASCII pattern matching ignores the value's
+                        // trailing blanks (the pattern's count); Unicode
+                        // matching keeps them.
+                        let ascii = [&**expr, &**pattern]
+                            .iter()
+                            .all(|o| ansi(self.0, self.1, o));
+                        for (index, operand) in [expr, pattern].into_iter().enumerate() {
+                            let mut inner = std::mem::replace(
+                                operand.as_mut(),
+                                Expr::Value(Value::Null.into()),
+                            );
+                            if ascii && index == 0 {
+                                inner = msduck_sql::expr::unary_function("RTRIM", inner);
+                            }
+                            **operand = msduck_sql::expr::unary_function(MARK, inner);
+                        }
+                        Ok(())
+                    } else {
+                        mark(self.0, self.1, "like", vec![expr, pattern])
+                    }
+                }
                 Expr::InList { expr, list, .. } => {
                     let mut operands = vec![expr.as_mut()];
                     operands.extend(list.iter_mut());
-                    mark(self.0, operands)
+                    mark(self.0, self.1, "equal to", operands)
                 }
                 Expr::Case {
                     operand: Some(operand),
                     conditions,
                     ..
-                } => {
+                } if !volatile(operand) => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
-                    mark(self.0, operands)
+                    mark(self.0, self.1, "equal to", operands)
+                }
+                // DISTINCT counts and extrema of a column with a collation
+                // of its own keep it (explicitly), instead of the default's
+                // keys.
+                Expr::Function(f)
+                    if matches!(
+                        f.name.to_string().to_ascii_uppercase().as_str(),
+                        "COUNT" | "COUNT_BIG" | "MIN" | "MAX"
+                    ) =>
+                {
+                    let count = f.name.to_string().to_ascii_uppercase().starts_with("COUNT");
+                    if let FunctionArguments::List(list) = &mut f.args
+                        && (!count
+                            || matches!(
+                                list.duplicate_treatment,
+                                Some(DuplicateTreatment::Distinct)
+                            ))
+                        && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] =
+                            list.args.as_mut_slice()
+                        && let Some(name) = own_collation(self.0, value).map(str::to_owned)
+                        // Binding gives Latin1_General_100_BIN2 extrema their
+                        // own lossless UTF-16 path.
+                        && (count || !name.eq_ignore_ascii_case("Latin1_General_100_BIN2"))
+                    {
+                        let inner = std::mem::replace(value, Expr::Value(Value::Null.into()));
+                        *value = Expr::Collate {
+                            expr: Box::new(inner),
+                            collation: ObjectName::from(vec![Ident::new(name)]),
+                        };
+                    }
+                    Ok(())
                 }
                 // NULLIF(a, b) becomes CASE WHEN a = b …; marking `b` alone
                 // keeps `a`, which gives the result its type, as written.
@@ -218,17 +653,76 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
                         && !collated(first)
                         && !collated(second)
                         && !marked(second)
-                        && unicode(self.0, first)
                     {
-                        let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
-                        *second = msduck_sql::expr::unary_function(MARK, inner);
+                        if let Err((left, right)) =
+                            columns_collation(self.0, [&*first, &*second].into_iter())
+                        {
+                            return ControlFlow::Break(conflict("equal to", &left, &right));
+                        }
+                        // A first argument with a collation of its own
+                        // compares under it: the second argument takes it
+                        // explicitly, leaving the first (and the result) as is.
+                        if let Some(name) = own_collation(self.0, first).map(str::to_owned) {
+                            let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+                            *second = Expr::Collate {
+                                expr: Box::new(inner),
+                                collation: ObjectName::from(vec![Ident::new(name)]),
+                            };
+                        } else if unicode(self.0, first) {
+                            let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+                            *second = msduck_sql::expr::unary_function(MARK, inner);
+                        }
                     }
+                    Ok(())
                 }
                 Expr::InSubquery {
                     expr: value,
                     subquery,
                     ..
                 } => {
+                    let member =
+                        matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
+                    // A column with a collation of its own, on either side,
+                    // compares through the explicit COLLATE lowering; columns
+                    // of different collations conflict.
+                    if !member && !collated(value) {
+                        let projected = match subquery.body.as_mut() {
+                            SetExpr::Select(select) => match select.projection.as_mut_slice() {
+                                [
+                                    SelectItem::UnnamedExpr(p)
+                                    | SelectItem::ExprWithAlias { expr: p, .. },
+                                ] => Some(p),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        let mut operands: Vec<&Expr> = vec![value.as_ref()];
+                        operands.extend(projected.as_deref());
+                        if let Err((left, right)) = columns_collation(self.0, operands.into_iter())
+                        {
+                            return ControlFlow::Break(conflict("equal to", &left, &right));
+                        }
+                        let name = own_collation(self.0, value)
+                            .or_else(|| projected.as_deref().and_then(|p| own_collation(self.0, p)))
+                            .map(str::to_owned);
+                        if let Some(name) = name {
+                            let wrap = |operand: &mut Expr| {
+                                if !collated(operand) {
+                                    let inner =
+                                        std::mem::replace(operand, Expr::Value(Value::Null.into()));
+                                    *operand = Expr::Collate {
+                                        expr: Box::new(inner),
+                                        collation: ObjectName::from(vec![Ident::new(name.clone())]),
+                                    };
+                                }
+                            };
+                            wrap(value.as_mut());
+                            if let Some(projected) = projected {
+                                wrap(projected);
+                            }
+                            return ControlFlow::Continue(());
+                        }
+                    }
                     let projected = match subquery.body.as_ref() {
                         SetExpr::Select(select) => match select.projection.as_slice() {
                             [
@@ -239,8 +733,6 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
                         },
                         _ => None,
                     };
-                    let member =
-                        matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
                     if !member
                         && !collated(value)
                         && (unicode(self.0, value) || projected.is_some_and(|p| unicode(self.0, p)))
@@ -249,11 +741,18 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
                             std::mem::replace(value.as_mut(), Expr::Value(Value::Null.into()));
                         **value = msduck_sql::expr::unary_function(MEMBER, inner);
                     }
+                    Ok(())
                 }
-                _ => {}
+                _ => Ok(()),
+            };
+            match result {
+                Ok(()) => ControlFlow::Continue(()),
+                Err(error) => ControlFlow::Break(error),
             }
-            ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(node, &mut Mark(catalog));
+    match VisitMut::visit(node, &mut Mark(catalog, parameters)) {
+        ControlFlow::Break(error) => Err(error),
+        ControlFlow::Continue(()) => Ok(()),
+    }
 }

@@ -1,8 +1,10 @@
 // Comparisons, LIKE, ordering, concatenation and character conversions over
 // NVARCHAR/NCHAR (Unicode carrier) columns (docs/gaps-unicode-predicates.md).
 // Expected rows and diagnostics come from reference/gaps-unicode-predicates.json,
-// captured from SQL Server in a Latin1_General_100_BIN2 database (msduck's
-// default binary comparison) by scripts/capture-gaps-unicode-predicates.mjs.
+// captured from SQL Server under the default collation
+// (SQL_Latin1_General_CP1_CI_AS, which msduck reports and follows: case and
+// ignorable units such as NUL and surrogates do not distinguish values) by
+// scripts/capture-gaps-unicode-predicates.mjs.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -111,8 +113,9 @@ test('bracketed names, derived tables, unions and CASE results', async t => {
   await query(c, "CREATE TABLE [dbo].[t] ([id] int, [n] nvarchar(10)); INSERT [dbo].[t] VALUES (1, N'x'), (2, N'Ā'), (3, N'x  '), (4, NULL)")
   await query(c, "CREATE TABLE u (n nvarchar(10)); INSERT u VALUES (N'Ā')")
   const rows = async (sql, parameters) => (await query(c, sql, parameters)).rows
-  assert.deepEqual(await rows('SELECT [x].[id] FROM [dbo].[t] AS [x] WHERE [x].[n] < @p ORDER BY [x].[n], [x].[id]', [['p', TYPES.NVarChar, 'z']]), [[1], [3]])
-  assert.deepEqual(await rows("SELECT [id], ISNULL([n], N'-') FROM [dbo].[t] ORDER BY [n] DESC, [id]"), [[2, 'Ā'], [1, 'x'], [3, 'x  '], [4, '-']])
+  // Under the default collation Ā sorts beside A, before x and z.
+  assert.deepEqual(await rows('SELECT [x].[id] FROM [dbo].[t] AS [x] WHERE [x].[n] < @p ORDER BY [x].[n], [x].[id]', [['p', TYPES.NVarChar, 'z']]), [[2], [1], [3]])
+  assert.deepEqual(await rows("SELECT [id], ISNULL([n], N'-') FROM [dbo].[t] ORDER BY [n] DESC, [id]"), [[1, 'x'], [3, 'x  '], [2, 'Ā'], [4, '-']])
   assert.deepEqual(await rows("SELECT d.id FROM (SELECT id, n FROM t) AS d WHERE d.n = N'x' ORDER BY d.id"), [[1], [3]])
   assert.deepEqual(await rows("WITH e AS (SELECT id, n FROM t) SELECT id FROM e WHERE n IN (N'Ā', N'q')"), [[2]])
   assert.deepEqual(await rows("SELECT id FROM t WHERE n IN (SELECT n FROM u UNION ALL SELECT N'x') ORDER BY id"), [[1], [2], [3]])

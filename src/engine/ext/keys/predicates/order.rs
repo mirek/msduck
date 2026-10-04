@@ -8,6 +8,9 @@
 //! markers here; [`super::lower`] turns them into `typeof` dispatches, so a
 //! same-named column of another type keeps its own order. DISTINCT and set
 //! operations, whose ORDER BY must name output columns, are left unchanged.
+//! A carrier column declared with a collation of its own (case-sensitive,
+//! binary or accent-insensitive) orders by that collation through an
+//! explicit COLLATE instead.
 use super::catalog::Catalog;
 use super::lower::{SORT, TIE};
 use sqlparser::ast::*;
@@ -110,8 +113,8 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
     if carriers.is_empty() {
         return;
     }
-    struct Rewrite(HashSet<String>);
-    impl VisitorMut for Rewrite {
+    struct Rewrite<'a>(&'a Catalog, HashSet<String>);
+    impl VisitorMut for Rewrite<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
             let (Some(order), SetExpr::Select(select)) = (&mut query.order_by, query.body.as_ref())
@@ -127,10 +130,31 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             let mut rewritten = Vec::with_capacity(items.len());
             for item in items.drain(..) {
                 let target = column(&item.expr, select)
-                    .filter(|c| last_name(c).is_some_and(|n| self.0.contains(&n)))
+                    .filter(|c| last_name(c).is_some_and(|n| self.1.contains(&n)))
                     .cloned();
-                match target {
-                    Some(target) => {
+                // The collation of the carrier column the item names, when it
+                // compares differently from the default.
+                let collation = target
+                    .as_ref()
+                    .filter(|t| self.0.carrier(t).is_some())
+                    .and_then(|t| self.0.collation(t))
+                    .filter(|name| {
+                        use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+                        sensitivity(name) == Some(Sensitivity::Other)
+                    })
+                    .map(str::to_owned);
+                match (target, collation) {
+                    // A column collation of its own orders through the
+                    // explicit COLLATE lowering.
+                    (Some(target), Some(collation)) => rewritten.push(OrderByExpr {
+                        expr: Expr::Collate {
+                            expr: Box::new(target),
+                            collation: ObjectName::from(vec![Ident::new(collation)]),
+                        },
+                        options: item.options,
+                        with_fill: item.with_fill,
+                    }),
+                    (Some(target), None) => {
                         rewritten.push(OrderByExpr {
                             expr: marker(SORT, target.clone()),
                             options: item.options.clone(),
@@ -142,12 +166,12 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
                             with_fill: item.with_fill,
                         });
                     }
-                    None => rewritten.push(item),
+                    (None, _) => rewritten.push(item),
                 }
             }
             *items = rewritten;
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(statement, &mut Rewrite(carriers));
+    let _ = VisitMut::visit(statement, &mut Rewrite(catalog, carriers));
 }

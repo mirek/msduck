@@ -17,8 +17,9 @@ test('column collations survive physical lowering and failed DDL remains atomic'
   ])
   await query(c, "INSERT INTO dbo.collation_probe(a) VALUES(N'ÿ'),(N'Ā')")
   assert.deepEqual((await query(c,'SELECT MIN(a),MAX(a) FROM dbo.collation_probe')).rows,[['ÿ','Ā']])
-  await assert.rejects(query(c, 'ALTER TABLE dbo.collation_probe ADD bad NVARCHAR(8) COLLATE unsupported_collation'), /unsupported column collation/)
-  await assert.rejects(query(c, 'CREATE TABLE dbo.collation_bad(a INT COLLATE Latin1_General_100_BIN2)'), /character column/)
+  await assert.rejects(query(c, 'ALTER TABLE dbo.collation_probe ADD bad NVARCHAR(8) COLLATE unsupported_collation'), e => e.number === 448 && e.state === 2 && e.message === "Invalid collation 'unsupported_collation'.")
+  await assert.rejects(query(c, 'ALTER TABLE dbo.collation_probe ADD bad NVARCHAR(8) COLLATE German_PhoneBook_CI_AS'), /unsupported column collation/)
+  await assert.rejects(query(c, 'CREATE TABLE dbo.collation_bad(a INT COLLATE Latin1_General_100_BIN2)'), e => e.number === 447 && e.message === 'Expression type int is invalid for COLLATE clause.')
   assert.deepEqual((await query(c, "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.collation_probe'); SELECT OBJECT_ID(N'dbo.collation_bad')")).rows, [[3],[null]])
 })
 
