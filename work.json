@@ -2938,7 +2938,7 @@
     {
       "id": "identity-sequence-dependency-v1",
       "title": "Protect private IDENTITY sequences referenced by other defaults",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party workspace regression in table_alter::tests::dropping_identity_column_cleans_and_restores_private_objects at main e6fd8b4; no external submission approved.",
       "scope": [
         "src/identity.rs"
@@ -3053,7 +3053,7 @@
     {
       "id": "identity-alter-preflight-v1",
       "title": "Preflight dependent IDENTITY columns before ALTER DDL",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party macOS explicit-transaction reproduction during owner-authored identity-sequence-dependency-v1 review; no external submission approved.",
       "scope": [
         "src/table_alter.rs"
@@ -12042,6 +12042,24 @@
         "Same claiming worker combines with958 and existing supplements; exact frozenhead fullworkspace/client/audit checks, CI and verifiedreview or authorizedfallback; merge and registry completion only together."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
+    },
+    {
+      "id": "identity-ddl-dependency-recovery-v1",
+      "title": "Recover IDENTITY dependency guards and atomic ALTER preflight",
+      "state": "ready",
+      "authorization": "The owner authorized continuing full SQL Server compatibility work and takeover of unresponsive workers. On 2026-10-04, verified owner-authored, closed and unmerged PR #310 at 83d9c2e20e5e648f3680218f9a94d22553073645; its last update was 2026-09-26T23:29:48Z. The retained worktree is clean, its source last changed September 26, and no local process, team worker or attributable Linux job is active. Owner-approved contact #5978347974 at 09:03:27Z received no reply through 09:04:58Z. Task #307 remains Ready/claimed but its missing helper prevents acquiring #321; that failed claim granted no ownership. Preserve the old branch, receipt, permanent claim and evidence. Revoke only the old dependency task and its dependent preflight task, and publish a fresh bounded successor. Do not mark incomplete predecessors Done or change the live engine reservation in #871.",
+      "scope": [
+        "src/identity.rs",
+        "src/table_alter.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Recover owner checkpoint 83d9c2e from closed PR #310 as reviewed input, without adopting its receipt or presuming the change is complete. Protect private sequences referenced by live defaults, including nested nextval, casts, quoted names and case variants. Use AST and catalog facts with bound values; do not guess dependencies from substrings. Keep dynamic or unknown forms explicit and obtain actual DuckDB evidence where needed. Preserve ordinary allocation, persistence, rollback and successful retry.",
+        "Preflight dependencies before any destructive ALTER or DROP statement. Failed removal must preserve columns, rows, defaults, private sequences, catalog metadata and the caller transaction. Allow a same-statement removal that eliminates every dependency, and keep unrelated ALTER operations working. Cover autocommit, explicit transactions, multiple actions and retry after removing dependencies. Never cascade or consume sequence values during preflight. Preserve existing tests and show a focused regression failing on the approved predecessor.",
+        "Report backend and SQL Server diagnostic gaps without fabricating error numbers or claiming public support for private sequence expressions. Change only src/identity.rs and src/table_alter.rs; publish a disjoint companion only when evidence requires it. Reuse the completed root worktree and native cache, add no agents or worktrees, and honor the Linux build lock. Run full exact-revision formatting, workspace Rust, strict Clippy, clients and raw audit checks, required CI and independent/Codex review or the authorized availability fallback. The claiming worker owns review follow-up, merge and registry/project completion."
+      ],
+      "issue": 960,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmt7q"
     }
   ]
 }
