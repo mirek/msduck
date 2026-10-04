@@ -1166,7 +1166,7 @@ impl Session {
                 let parts = name
                     .0
                     .iter()
-                    .map(|part| part.to_string().trim_matches('"').to_lowercase())
+                    .filter_map(|part| part.as_ident().map(|ident| ident.value.to_lowercase()))
                     .collect::<Vec<_>>();
                 match parts.as_slice() {
                     [object] => local_dependent.contains(&("dbo".to_string(), object.clone())),

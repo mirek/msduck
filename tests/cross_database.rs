@@ -880,3 +880,43 @@ fn three_part_functions_and_bracketed_views() {
         40515
     );
 }
+
+#[test]
+fn view_ctes_follow_declaration_order_and_bracketed_local_views_count() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.cols AS SELECT name FROM sys.columns",
+    );
+    // The first `cols` is the view above; the CTE cols comes later.
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.outer_cols AS WITH a AS (SELECT name FROM cols), cols AS (SELECT 1 AS x) SELECT name FROM a",
+    );
+    ok(&mut session, "USE master");
+    assert_eq!(
+        fails(
+            &mut session,
+            "SELECT c.name FROM foo.dbo.outer_cols c JOIN dbo.loc l ON 1 = 1"
+        )
+        .0,
+        40515
+    );
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.local_cols AS SELECT name FROM sys.columns",
+    );
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.names (name NVARCHAR(128)); USE master",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "INSERT foo.dbo.names SELECT name FROM dbo.[local_cols]"
+        )
+        .0,
+        40515
+    );
+}

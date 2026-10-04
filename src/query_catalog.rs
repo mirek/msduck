@@ -808,37 +808,74 @@ pub(crate) fn catalog_dependent_views(
         let statements =
             sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, sql)
                 .ok()?;
-        // One-part names of CTEs anywhere in the definition are not tables.
-        let mut ctes = std::collections::HashSet::new();
-        struct Ctes<'a>(&'a mut std::collections::HashSet<String>);
-        impl Visitor for Ctes<'_> {
+        // One-part names of CTEs in scope are not tables. A CTE body sees
+        // itself and the earlier CTEs; the query body sees all of them.
+        struct Reads {
+            scopes: Vec<(Vec<String>, Vec<*const Query>, usize)>,
+            found: Vec<(String, String)>,
+        }
+        impl Visitor for Reads {
             type Break = ();
             fn pre_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<()> {
-                for cte in query.with.iter().flat_map(|with| &with.cte_tables) {
-                    self.0.insert(cte.alias.name.value.to_lowercase());
+                if let Some(scope) = self.scopes.last_mut()
+                    && let Some(index) = scope.1.iter().position(|body| std::ptr::eq(*body, query))
+                {
+                    scope.2 = index + 1;
+                }
+                let ctes = query
+                    .with
+                    .iter()
+                    .flat_map(|with| &with.cte_tables)
+                    .collect::<Vec<_>>();
+                self.scopes.push((
+                    ctes.iter()
+                        .map(|cte| cte.alias.name.value.to_lowercase())
+                        .collect(),
+                    ctes.iter().map(|cte| &*cte.query as *const Query).collect(),
+                    0,
+                ));
+                std::ops::ControlFlow::Continue(())
+            }
+            fn post_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<()> {
+                self.scopes.pop();
+                if let Some(scope) = self.scopes.last_mut()
+                    && scope
+                        .1
+                        .last()
+                        .is_some_and(|body| std::ptr::eq(*body, query))
+                {
+                    scope.2 = scope.0.len();
+                }
+                std::ops::ControlFlow::Continue(())
+            }
+            fn pre_visit_relation(&mut self, name: &ObjectName) -> std::ops::ControlFlow<()> {
+                let parts = name
+                    .0
+                    .iter()
+                    .map(|part| match part {
+                        ObjectNamePart::Identifier(ident) => ident.value.to_lowercase(),
+                        part => part.to_string().to_lowercase(),
+                    })
+                    .collect::<Vec<_>>();
+                match parts.as_slice() {
+                    [single]
+                        if self
+                            .scopes
+                            .iter()
+                            .any(|scope| scope.0[..scope.2].contains(single)) => {}
+                    [single] => self.found.push(("dbo".to_string(), single.clone())),
+                    [.., schema, name] => self.found.push((schema.clone(), name.clone())),
+                    [] => {}
                 }
                 std::ops::ControlFlow::Continue(())
             }
         }
-        let _ = statements.visit(&mut Ctes(&mut ctes));
-        let mut found = Vec::new();
-        let _ = visit_relations(&statements, |name: &ObjectName| {
-            let parts = name
-                .0
-                .iter()
-                .map(|part| match part {
-                    ObjectNamePart::Identifier(ident) => ident.value.to_lowercase(),
-                    part => part.to_string().to_lowercase(),
-                })
-                .collect::<Vec<_>>();
-            match parts.as_slice() {
-                [name] if ctes.contains(name) => {}
-                [name] => found.push(("dbo".to_string(), name.clone())),
-                [.., schema, name] => found.push((schema.clone(), name.clone())),
-                [] => {}
-            }
-            std::ops::ControlFlow::<()>::Continue(())
-        });
+        let mut reads = Reads {
+            scopes: Vec::new(),
+            found: Vec::new(),
+        };
+        let _ = statements.visit(&mut reads);
+        let found = reads.found;
         Some(found)
     };
     let views = views
