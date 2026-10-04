@@ -439,6 +439,69 @@ declaredPredicateCases.push(...[
   }
 ])
 
+declaredPredicateCases.push(...[
+  {
+    "name": "ansi ordering range",
+    "query": "CREATE TABLE order_ansi(v VARCHAR(2)); INSERT order_ansi VALUES('x '),('y'); SELECT v FROM order_ansi ORDER BY CASE WHEN v > 'x' THEN 0 ELSE 1 END,v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "VarChar",
+              2
+            ]
+          ],
+          "rows": [
+            [
+              "y"
+            ],
+            [
+              "x "
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        null,
+        2,
+        2
+      ]
+    }
+  },
+  {
+    "name": "ansi ordering between",
+    "query": "SELECT v FROM order_ansi ORDER BY CASE WHEN v BETWEEN 'w' AND 'x' THEN 0 ELSE 1 END,v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "VarChar",
+              2
+            ]
+          ],
+          "rows": [
+            [
+              "x "
+            ],
+            [
+              "y"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  }
+])
+
 test('declared scalar character predicates match captured SQL Server results', async t => {
   const connection = await start(t)
   for (const entry of declaredPredicateCases) {

@@ -179,8 +179,10 @@ Quoted `[@p]` names remain columns, independently of bare parameter declarations
 Numeric and unresolved peers retain the numeric coercion path; COALESCE is
 proved character only when every non-NULL result operand is character.
 
-Ten additional raw SQL Server 17.0.4065.4 captures cover these predicates,
+Twelve additional raw SQL Server 17.0.4065.4 captures cover these predicates,
 three-valued NULL membership, declaration-based ORDER BY scope, numeric
-precedence, quoted columns and IF membership. Client replay compares captured
+precedence, quoted columns, IF membership and ANSI ORDER BY ranges.
+Both predicate marking and ANSI range padding retain their own SELECT scope
+through query ordering without exposing its sources to WITH definitions. Client replay compares captured
 rows, descriptor names/types/lengths, errors and completion counts. These
 focused cases do not establish full SQL Server compatibility.

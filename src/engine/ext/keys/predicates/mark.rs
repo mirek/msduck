@@ -568,7 +568,7 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
 /// operand (equality and IN get this from ANSI padding). This pass runs on
 /// its own, without the Unicode marking.
 pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, node: &mut T) {
-    struct Pad<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>);
+    struct Pad<'a>(&'a Catalog, &'a Parameters, Vec<Catalog>, Vec<bool>);
     impl Pad<'_> {
         fn catalog(&self) -> &Catalog {
             self.2.last().unwrap_or(self.0)
@@ -578,9 +578,14 @@ pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
             self.2.push(self.catalog().query_scope(query));
+            self.3
+                .push(matches!(query.body.as_ref(), SetExpr::Select(_)));
             ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            if self.3.pop() == Some(true) {
+                self.2.pop();
+            }
             self.2.pop();
             ControlFlow::Continue(())
         }
@@ -589,7 +594,9 @@ pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters
             ControlFlow::Continue(())
         }
         fn post_visit_select(&mut self, _: &mut Select) -> ControlFlow<()> {
-            self.2.pop();
+            if self.3.last() != Some(&true) {
+                self.2.pop();
+            }
             ControlFlow::Continue(())
         }
 
@@ -624,7 +631,7 @@ pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters, Vec::new()));
+    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters, Vec::new(), Vec::new()));
 }
 
 /// Whether an operand is a column with a collation of its own.

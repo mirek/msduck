@@ -454,3 +454,34 @@ fn scalar_character_predicates_in_control_flow_do_not_require_statement_catalogs
         1
     );
 }
+
+#[test]
+fn ansi_range_ordering_retains_select_scope_without_leaking_cte_sources() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        "CREATE TABLE ansi_order_source(v VARCHAR(2)); INSERT ansi_order_source VALUES('x '),('y'); SELECT v INTO ansi_order_result FROM ansi_order_source ORDER BY CASE WHEN v > 'x' THEN 0 ELSE 1 END,v",
+    );
+    let rows: Vec<String> = session
+        .db
+        .prepare("SELECT v FROM ansi_order_result")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec!["y", "x "]);
+    batch(
+        &mut session,
+        "WITH c AS (SELECT v FROM ansi_order_source WHERE v > 'x') SELECT v INTO ansi_cte_order_result FROM c ORDER BY v",
+    );
+    let rows: Vec<String> = session
+        .db
+        .prepare("SELECT v FROM ansi_cte_order_result")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec!["y"]);
+}
