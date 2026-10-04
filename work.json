@@ -12143,7 +12143,7 @@
     {
       "id": "tmp-hygiene-v1",
       "title": "Use /tmp for temporary files with explicit hygiene rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-04): \"ok, actually use /tmp which has ram backed filesystem, but please add instructions about hygiene - delete unused files, we had 62GB there that was full\". First-party incident evidence: 16,523 stale /tmp/msduck-* directories and two orphaned msduck test servers; a live session's /tmp/claude-<uid> task directory was deleted. No external content.",
       "scope": [
         "AGENTS.md",
