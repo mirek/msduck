@@ -46,15 +46,15 @@ Acquisition source SHA256 is
 the immutable original artifact is 7,962,502 bytes, SHA256
 `53c33fed21e40b89ed824c1b077ee7acbea5107d91aca34e555675d90f97ef80`.
 The final collector SHA256 is
-`4dd4bf5f17fa3b6fe3be3d0449744d2902d5ed43e1ec4ea2f4f19fb991f8fc97`.
-Its independent four-database reproduction exited zero: 8,403,158 raw bytes,
-SHA256 `54bc855752296818aeb7e9f9a1787a242078d1831b3d5f6895b3078637c38c8a`.
-The complete 13,235-difference sidecar is 8,745,684 bytes, SHA256
-`73c2edaf0dba9f1fcceb18bba541605ab5786a558c3a5c05f57b44e785b57bd5`.
-Private proof `.tmp/collation-precedence-reproduction-proof.json` verifies all
+`a18291b128cbf3aec21362014959b2f82e653b782dd4c465626ea01c1a70d6af`.
+Its independent four-database reproduction exited zero: 8,565,694 raw bytes,
+SHA256 `6144fcabd12b37721159921fae1a034e6ab8417ea7dac258d7ca8cac381e40fc`.
+The complete 9,453-difference sidecar is 6,889,683 bytes, SHA256
+`0f3175559ee020296bdb9e5b0ab687169e622d785676039d10f9e364d02cac98`.
+Private proof `.tmp/collation-precedence-final2-reproduction-proof.json` verifies all
 eight runs, 1,008 observations, exact recursive sidecar and 576 within-run
 valid-wire result comparisons. No identities/counters/errors are normalized
-in either original artifact. All 16 focused tests pass on macOS and Linux,
+in either original artifact. All 17 focused tests pass on macOS and Linux,
 with zero failures/cancellations/skips/TODO; final-source reproduction and
 all owned resource cleanup are terminal. The unpinned acquisition intentionally
 failed validation only after retaining its complete original raw observations.
@@ -67,3 +67,14 @@ complete comparison sidecars or an explicit omission failure, and awaits owned
 container/database cleanup. Focused tests reject coherent request/response/default
 corruption and test trace/budget/retention/CLI failures using bounded assertion
 messages. No native server or runtime adapter change is included.
+
+The final validator also pins the complete context request payload, including
+all 22 ALL_HEADERS bytes, after replacing only its checked owned database
+identity in a separate digest. Independent inspection found all 504 original
+context headers exactly `16000000120000000200000000000000000001000000`.
+Four coherent mutations of internal length, header type, transaction descriptor
+and outstanding count leave SQL, packet lengths and decoded context unchanged:
+predecessor `571750b` accepted all four, corrected validation rejects each.
+Private proof `.tmp/collation-precedence-context-header-before-after.json`
+retains this result. Earlier four-database reproduction evidence remains private
+as predecessor evidence; no original raw observation or fixture byte changed.
