@@ -11662,7 +11662,7 @@
     {
       "id": "ansi-stored-utf8-projection-v1",
       "title": "Decode stored UTF8 bytes into SQL Server UTF16 units",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing implementation goal. Use actual SQL Server at-rest reinterpretation plus unchanged BulkLoad fixtures to implement stored byte projection independently of admission and strict scalar API.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion.rs",
