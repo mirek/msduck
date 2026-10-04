@@ -11876,7 +11876,7 @@
     {
       "id": "bulk-character-wire-capacity-reference-v1",
       "title": "Measure BulkLoad wire-only character ROW overflow against source declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party PR948 runtime/codec analysis: valid zero-width metadata is measured, but ROW payload exceeding wire TYPE_INFO while fitting source declaration remains explicitly unmeasured4804. Acquire independent SQL Server evidence before changing runtime/decoder rules; no third-party content.",
       "scope": [
         "scripts/capture-bulk-character-wire-capacity.mjs",
