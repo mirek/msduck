@@ -126,16 +126,8 @@ impl Visitor for LocalRelations {
         self.depth -= 1;
         ControlFlow::Continue(())
     }
-    fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
-        if self.depth == 0 {
-            for item in &select.projection {
-                if let SelectItem::ExprWithAlias { alias, .. } = item {
-                    self.relations.defined.insert(lower(alias));
-                }
-            }
-        }
-        ControlFlow::Continue(())
-    }
+    // SELECT aliases are outputs, not bindings visible to their own expressions.
+    // ORDER BY consumers resolve aliases against the projection explicitly.
     fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
         if self.depth == 0 {
             let result = self.relations.pre_visit_table_factor(factor);

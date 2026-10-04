@@ -42,7 +42,9 @@ WITH columns use their explicit declarations: NVARCHAR/NCHAR are carriers,
 VARCHAR/CHAR are backend text, and other types stay non-text. These declarations
 come from the AST, independent of the document value or returned rows. Query
 and SELECT frames keep nested/sibling sources separate and give local aliases
-priority over correlated outer sources. Scalar-query projection checks use that
+priority over correlated outer sources. Projection aliases do not shadow source
+columns inside SELECT expressions; ORDER BY consumers resolve output aliases
+against the projection explicitly. Scalar-query projection checks use that
 query's frame; set-operation pinning resolves each branch separately. Default
 and explicit aliases are recognized; ambiguous aliases, derived/CTE columns and
 renamed column lists remain unknown. Same-named physical tables retain the
@@ -57,13 +59,23 @@ evaluation. Nested admitted alternatives retain this carrier provenance. ANSI br
 convert through their declared CP1252 family before Unicode promotion; under
 the supported non-SC collations a supplementary ANSI literal contributes two
 best-fit bytes. Numeric and unresolved alternatives keep the existing path.
-Set branches align complete results using each branch’s query scope. Character
-branches use their common Unicode declaration; proved numeric peers retain
+Set branches align each immediate child result using its own query scope.
+An inner DISTINCT finishes in its own character domain before a numeric parent
+converts its completed output: `01 UNION 1 UNION ALL 7` therefore retains both
+rows that become integer 1. ANSI child results convert through their own
+declarations before Unicode promotion. Character branches use their common
+Unicode declaration; proved numeric peers retain
 SQL Server numeric precedence via explicit conversions of the completed branch
 result. Unknown peers stay unresolved. The physical alternative’s internal
 conversion remains unchanged. Distinct UNION and INTERSECT/EXCEPT membership
 use the existing default character equality keys and NULL-safe equality, while
 preserving the selected raw payload and materializing membership inputs once.
+For the captured UNION cases, input-branch priority retains the first branch’s
+case-equivalent payload. This is evidence for those queries, not a universal
+claim about SQL Server representative selection under arbitrary execution plans.
+The default key is gated against explicit unknown or nondefault collations and
+declared nondefault column collations. Such domains retain the existing native
+set path; their full collation-aware set compatibility remains unproved.
 This lets the existing comparison and alternative-expression lowering handle
 COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
 

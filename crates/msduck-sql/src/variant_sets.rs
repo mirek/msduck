@@ -204,11 +204,56 @@ pub fn wrap(body: &mut Box<SetExpr>, names: &[String], variants: &[bool]) {
 }
 
 pub fn deduplicate(body: &mut SetExpr, names: &[String], variants: &[Equality]) {
+    let unicode = variants
+        .iter()
+        .any(|value| matches!(value, Equality::Unicode));
+    let priority = unicode
+        && matches!(
+            body,
+            SetExpr::SetOperation {
+                op: SetOperator::Union,
+                set_quantifier: SetQuantifier::All,
+                ..
+            }
+        );
+    let mut wrapped_names = names.to_vec();
+    if priority {
+        // A set's logical equality must not replace its selected payload with
+        // the binary-minimum spelling. Preserve left input priority explicitly.
+        let mut rank_name = "__variant_input_priority".to_string();
+        while names
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(&rank_name))
+        {
+            rank_name.push('_');
+        }
+        let SetExpr::SetOperation { left, right, .. } = body else {
+            unreachable!()
+        };
+        for (rank, child) in [(0, left), (1, right)] {
+            wrap(child, names, &vec![false; names.len()]);
+            let SetExpr::Select(select) = child.as_mut() else {
+                unreachable!()
+            };
+            select.projection.push(SelectItem::ExprWithAlias {
+                expr: crate::expr::number(rank),
+                alias: Ident::new(&rank_name),
+            });
+        }
+        wrapped_names.push(rank_name);
+    }
     let mut inner = Box::new(body.clone());
-    wrap(&mut inner, names, &vec![false; names.len()]);
+    wrap(
+        &mut inner,
+        &wrapped_names,
+        &vec![false; wrapped_names.len()],
+    );
     let SetExpr::Select(select) = inner.as_mut() else {
         unreachable!()
     };
+    if priority {
+        select.projection.pop();
+    }
     select.distinct = Some(Distinct::On(
         variants
             .iter()
@@ -226,9 +271,9 @@ pub fn deduplicate(body: &mut SetExpr, names: &[String], variants: &[Equality]) 
         .iter()
         .any(|value| matches!(value, Equality::Unicode))
     {
-        // Preserve one original payload for equivalent keys, preferring the
-        // shorter binary prefix when trailing spaces are the only difference.
-        // Sort references to materialized branch results, never source operands.
+        // Order references to completed inputs, never source operands. A
+        // priority tag chooses the left original payload; raw bytes only
+        // break ties inside one input, retaining every selected code unit.
         let Statement::Query(mut query) =
             Parser::parse_sql(&GenericDialect {}, "SELECT NULL ORDER BY NULL")
                 .expect("generated character distinct ordering")
@@ -240,29 +285,42 @@ pub fn deduplicate(body: &mut SetExpr, names: &[String], variants: &[Equality]) 
             OrderByKind::Expressions(exprs) => exprs[0].clone(),
             _ => unreachable!(),
         };
-        let expressions = variants
+        let mut expressions = variants
             .iter()
             .enumerate()
-            .flat_map(|(i, variant)| {
+            .map(|(i, variant)| {
                 let value = Expr::CompoundIdentifier(vec![
                     Ident::new("__variant_set_source"),
                     Ident::new(format!("__variant_set_{i}")),
                 ]);
                 let mut key = template.clone();
-                key.expr = variant.key(value.clone());
-                let mut ordering = vec![key];
-                if matches!(variant, Equality::Unicode) {
-                    let mut raw = template.clone();
-                    raw.expr = crate::expr::binary_function(
-                        "struct_extract",
-                        crate::expr::unary_function("__msduck_carrier_input", value),
-                        Expr::Value(Value::SingleQuotedString("__msduck_utf16le".into()).into()),
-                    );
-                    ordering.push(raw);
-                }
-                ordering
+                key.expr = variant.key(value);
+                key
             })
-            .collect();
+            .collect::<Vec<_>>();
+        if priority {
+            let mut rank = template.clone();
+            rank.expr = Expr::CompoundIdentifier(vec![
+                Ident::new("__variant_set_source"),
+                Ident::new(format!("__variant_set_{}", names.len())),
+            ]);
+            expressions.push(rank);
+        }
+        for (i, variant) in variants.iter().enumerate() {
+            if matches!(variant, Equality::Unicode) {
+                let value = Expr::CompoundIdentifier(vec![
+                    Ident::new("__variant_set_source"),
+                    Ident::new(format!("__variant_set_{i}")),
+                ]);
+                let mut raw = template.clone();
+                raw.expr = crate::expr::binary_function(
+                    "struct_extract",
+                    crate::expr::unary_function("__msduck_carrier_input", value),
+                    Expr::Value(Value::SingleQuotedString("__msduck_utf16le".into()).into()),
+                );
+                expressions.push(raw);
+            }
+        }
         query.order_by.as_mut().unwrap().kind = OrderByKind::Expressions(expressions);
         query.body = inner;
         *body = SetExpr::Query(query);

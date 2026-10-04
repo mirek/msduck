@@ -413,6 +413,271 @@ const rawAlternativeCases = [
       0
     ]
   }
+},
+{
+  "name": "nested numeric distinct",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"01\"}') j UNION SELECT N'1' UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            1
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "parenthesized numeric distinct",
+  "query": "(SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"01\"}') j UNION SELECT N'1') UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            1
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "case representatives first lower",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'X'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "case representatives first upper",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"X\"}') j UNION SELECT N'x'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "X"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi subtree distinct",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"y\"}') j UNION ALL (SELECT CAST('A' AS VARCHAR(2)) UNION SELECT CAST('A ' AS VARCHAR(4)))",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "A"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "ansi set best fit",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"y\"}') j UNION ALL SELECT '\u6f22'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "?"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "ansi supplementary set width",
+  "query": "SELECT COALESCE(j.v,N'x') AS v FROM OPENJSON(N'{\"v\":\"y\"}') WITH(v NVARCHAR(1)) j UNION ALL SELECT '\ud83e\udd86'",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            "y"
+          ],
+          [
+            "??"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
+},
+{
+  "name": "projection alias source value",
+  "query": "SELECT COALESCE(value,N'x') AS value FROM OPENJSON(N'[null]')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "projection aliases raw source",
+  "query": "SELECT COALESCE(value,N'x') AS value,COALESCE([key],N'z') AS [key] FROM OPENJSON(N'{\"a\":\"\\ud800\",\"b\":null}') ORDER BY [key]",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ],
+          [
+            "key",
+            "NVarChar",
+            8000
+          ]
+        ],
+        "rows": [
+          [
+            "\ud800",
+            "a"
+          ],
+          [
+            "x",
+            "b"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      2
+    ]
+  }
 }
 ]
 

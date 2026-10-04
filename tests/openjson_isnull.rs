@@ -806,3 +806,91 @@ fn openjson_set_wrappers_preserve_user_ctes_and_nested_distinct_operators() {
         .unwrap();
     assert_eq!(units, vec![b'?', 0, b'?', 0]);
 }
+
+#[test]
+fn nested_character_distinct_finishes_before_parent_numeric_conversion() {
+    let (_server, mut session) = session();
+    for (index,source) in [
+        r#"SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":"01"}') j UNION SELECT N'1'"#,
+        r#"(SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":"01"}') j UNION SELECT N'1')"#,
+    ].iter().enumerate() {
+        batch(&mut session,&format!("CREATE TABLE boundary_{index}(v INT); INSERT boundary_{index} {source} UNION ALL SELECT 7;"));
+        let rows: Vec<i32> = session.db.prepare(&format!("SELECT v FROM boundary_{index} ORDER BY v")).unwrap()
+            .query_map([], |r|r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        assert_eq!(rows,vec![1,1,7]);
+    }
+}
+
+#[test]
+fn character_union_retains_the_first_input_representative() {
+    let (_server, mut session) = session();
+    for (index, (first, second)) in [("x", "X"), ("X", "x"), ("x ", "x")].iter().enumerate() {
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE representative_{index}(v NVARCHAR(MAX)); INSERT representative_{index}
+            SELECT COALESCE(j.[value],N'z') AS v FROM OPENJSON(N'{{"a":"{first}"}}') j UNION SELECT N'{second}';"#
+            ),
+        );
+        let rows: Vec<Vec<u8>> = session
+            .db
+            .prepare(&format!(
+                "SELECT v.__msduck_utf16le FROM representative_{index}"
+            ))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        let expected = first
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(rows, vec![expected]);
+    }
+}
+
+#[test]
+fn ansi_set_children_convert_before_unicode_promotion() {
+    let (_server, mut session) = session();
+    for (index, (source, expected)) in [
+        (r#"SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":"y"}') j UNION ALL (SELECT CAST('A' AS VARCHAR(2)) UNION SELECT CAST('A ' AS VARCHAR(4)))"#, vec!["y", "A"]),
+        (r#"SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":"y"}') j UNION ALL SELECT '漢'"#, vec!["y", "?"]),
+        (r#"SELECT COALESCE(j.v,N'x') AS v FROM OPENJSON(N'{"v":"y"}') WITH(v NVARCHAR(1)) j UNION ALL SELECT '🦆'"#, vec!["y", "??"]),
+    ].iter().enumerate() {
+        batch(&mut session, &format!("CREATE TABLE ansi_boundary_{index}(v NVARCHAR(MAX)); INSERT ansi_boundary_{index} {source};"));
+        let mut rows: Vec<Vec<u8>> = session.db.prepare(&format!("SELECT v.__msduck_utf16le FROM ansi_boundary_{index}"))
+            .unwrap().query_map([], |r| r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        let mut expected = expected.iter().map(|value| value.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>()).collect::<Vec<_>>();
+        rows.sort(); expected.sort(); assert_eq!(rows, expected);
+    }
+}
+
+#[test]
+fn projection_aliases_do_not_shadow_openjson_source_columns() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE source_aliases(v NVARCHAR(MAX), k NVARCHAR(4000));
+        INSERT source_aliases SELECT COALESCE(value,N'x') AS value,COALESCE([key],N'z') AS [key]
+        FROM OPENJSON(N'{"a":"\ud800","b":null}') ORDER BY [key];"#,
+    );
+    let rows: Vec<(Vec<u8>, Vec<u8>)> = session.db.prepare("SELECT k.__msduck_utf16le, v.__msduck_utf16le FROM source_aliases ORDER BY k.__msduck_utf16le")
+        .unwrap().query_map([], |r| Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<duckdb::Result<_>>().unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (vec![b'a', 0], vec![0, 0xd8]),
+            (vec![b'b', 0], vec![b'x', 0])
+        ]
+    );
+    batch(
+        &mut session,
+        "INSERT source_aliases(v) SELECT COALESCE(value,N'x') AS value FROM OPENJSON(N'[null]');",
+    );
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM source_aliases", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 3);
+}
