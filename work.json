@@ -12164,7 +12164,7 @@
     {
       "id": "stored-default-duckdb-dialect-v1",
       "title": "Parse backend-stored INSERT defaults with the DuckDB dialect",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Continuing owner full SQL Server compatibility goal. Exact-head PR964 full Rust gate and an owner-run native probe reproduce the unchanged conditional SESSION_CONTEXT stored-default INSERT parser failure. Identical DuckDB serialized default is rejected by GenericDialect and accepted by DuckDbDialect. First-party evidence only; reuse the existing root worker/worktree/cache and Linux lock, no engine edits.",
       "scope": [
         "src/insert.rs",
@@ -12308,6 +12308,25 @@
         "Activate and claim only after dependencies done; no extra build caches and respect canonical Linux lock. Exact frozen fmt/strictworkspacealltargetClippy/workspaceRust/alltargetbuild/defaultnpm/rawaudit/requiredCI/independent and Codexreview or verifiedavailabilityfallback; worker owns PRfollowup/merge and completion of registry/issue/project."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PneGG"
+    },
+    {
+      "id": "insert-character-source-names-v1",
+      "title": "Preserve character INSERT source names and backend default parsing",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatibility goal and verified owner-initiated Codex review5407650826 on PR964. First-party pinned SQL Server17.0.4065.4 returns ordered x,z for unnamed and qualified UNION ALL INSERT projections; stable working 3eaa guard executable returns Binder errors. Same root worker stops stored-default-duckdb-dialect-v1 edits and retains its permanent receipt/evidence; this successor carries its completed-but-unmerged default dialect work plus bounded source-name preservation. Reuse existing worktree/cache/Linux lock; no engine.rs, third-party input or new worker/resources.",
+      "scope": [
+        "src/insert.rs",
+        "tests/stored_default_dialect.rs",
+        "tests/insert_set_source_names.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Retain the predecessor970 backend DuckDB dialect fix for omitted/explicit INSERT defaults and its raw STRUCT/default regressions. Preserve column names while packing unnamed identifier/qualified character set projections; do not fabricate labels for unknown expression shapes or change explicit aliases.",
+        "Reproduce both complete pinned SQL Server captures. Add native regressions for named ORDER BY/OFFSET over UNION ALL character INSERT sources including qualified names, Unicode/ANSI targets, explicit alias controls, raw UTF16, target width and selected ordering. Do not strip ORDER BY, sort captured rows, normalize errors or weaken existing tests.",
+        "Same root worker/worktree/private successor receipt/cache/runner lock. Combine PR964, frozen fmt/strictworkspacealltargetClippy/fullworkspaceRust/alltargetbuild/defaultnpm/manualclients/rawaudit/source-binaryproof/requiredCI/independent and verifiedCodexreview or authorizedavailabilityfallback. Worker owns exacthead merge and prompt registry/issue/project completion. Preserve old970 receipt and evidence; no engine.rs/new workers/caches."
+      ],
+      "issue": 977,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnsGC"
     }
   ]
 }
