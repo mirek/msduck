@@ -105,8 +105,14 @@ filled it.
   `mktemp` fails, leaving `TMPDIR` empty so tools fall back to the shared
   `/tmp`. Shell state does not persist in some harnesses, so record the path
   and reuse it in every command.
-- In scripts, remove the directory on every exit path, for example with
-  `trap 'rm -rf "$TMPDIR"' EXIT` right after creating it.
+- In scripts, remove the directory on every exit path, including signals,
+  right after creating it. Some shells (dash) skip `EXIT` traps on a signal,
+  so route signals through `exit`:
+
+  ```sh
+  trap 'rm -rf "$TMPDIR"' EXIT
+  trap 'exit 130' INT TERM HUP
+  ```
 - Delete it when a test run or the task ends, including after failures and
   interrupted runs. Delete files you no longer need during long tasks too.
 - Before deleting, stop the servers and reference containers you started. A

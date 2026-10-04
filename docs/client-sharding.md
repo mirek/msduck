@@ -90,6 +90,7 @@ Run the harness regressions with:
 ```sh
 TMPDIR=$(mktemp -d /tmp/msduck-shards-XXXXXX) && export TMPDIR || exit 1
 trap 'rm -rf "$TMPDIR"' EXIT
+trap 'exit 130' INT TERM HUP
 node --test tests/client-shards.test.mjs tests/client-test-command.test.mjs tests/remote-build.test.mjs
 ```
 
