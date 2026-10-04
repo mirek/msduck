@@ -11854,6 +11854,24 @@
       ],
       "issue": 947,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmZ3S"
+    },
+    {
+      "id": "bulk-character-wire-length-facts-v1",
+      "title": "Retain bounded character ROW length facts for measured runtime admission",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server compatibility goal. Original owner-run capacity899 eight ROW controls prove declared character overflow is SQL4815; claimed947 cannot recover that fact from shared decoder generic Malformed. First-party disjoint companion, same worker and paired PR948; no third-party inputs or scope mutation.",
+      "scope": [
+        "crates/msduck-tds/src/bulk_load.rs",
+        "crates/msduck-tds/tests/bulk_load.rs"
+      ],
+      "dependencies": [],
+      "issue": 949,
+      "acceptance": [
+        "Emit typed modern-character ROW byte-length overflow facts (column index, incoming byte count, wire capacity) before payload allocation, retaining bounded parsing, incremental fragmentation and poisoning. The codec must not infer a SQL error, source declaration or target semantics. Numeric/binary/Unicode odd-length and PLP/resource/framing failures preserve their existing classifications. Preserve complete valid decoded bytes and original codec limits; no parser/backend/session/I/O or tdslib export changes.",
+        "Meaningful pure tests cover supported fixed/variable ANSI and Unicode wire IDs, exact boundary and one-above, late column index, fragmented headers and incomplete oversized payload, poison state and existing unrelated failures. Root947 maps only proven source overflow to4815 with metadata precedence and preserves unknown decoder4804 paths. Retain original899 and945 fixtures unchanged and demonstrate integration behavior using original request shapes.",
+        "Fresh own exclusive claim/receipt in existing root worktree; no scope overlap or new worker/worktree/native cache. Include in paired PR948 with both task criteria, frozen exact-head full AGENTS checks, raw audit comparison/source-binary evidence, independent and verified Codex review or authorized availability fallback, required CI, exact-head merge and prompt Done/issue/project completion for both tasks. Honor canonical remote build lock and do not overwrite an executable during tests."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmcjP"
     }
   ]
 }
