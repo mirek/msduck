@@ -11831,7 +11831,7 @@
     {
       "id": "bulk-character-admission-runtime-v1",
       "title": "Apply measured character metadata and row admission in BulkLoad runtime",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing server goal; first-party source analysis and final owner task945 evidence only. Preliminary captures are not sufficient authorization to invent a rule. Begin only after945 merged/Done and this task is made ready.",
       "scope": [
         "crates/msduck-core/src/bulk_character_admission.rs",
