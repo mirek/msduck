@@ -756,3 +756,35 @@ fn a_cte_is_not_visible_before_its_declaration() {
     assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 3);
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn views_over_catalog_views_read_their_own_database() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.cols AS SELECT name FROM sys.columns",
+    );
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.cols2 AS SELECT name FROM dbo.cols",
+    );
+    ok(&mut session, "USE master");
+    for view in ["cols", "cols2"] {
+        ok(
+            &mut session,
+            &format!(
+                "IF NOT EXISTS (SELECT 1 FROM foo.dbo.{view} WHERE name = 'v') THROW 50001, 'not foo', 1"
+            ),
+        );
+        assert_eq!(
+            fails(
+                &mut session,
+                &format!("SELECT c.name FROM foo.dbo.{view} c JOIN dbo.loc l ON 1 = 1")
+            )
+            .0,
+            40515
+        );
+    }
+    assert_eq!(catalog(&session), "memory.dbo");
+}

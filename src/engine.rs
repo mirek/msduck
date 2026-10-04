@@ -988,6 +988,31 @@ impl Session {
             return Ok(CrossDatabase::Local);
         };
         let display = |alias: &str| self.database.catalog().display_name(alias);
+        // Views of another database that read its catalog views count as
+        // reading them.
+        let mut catalog_views = relations.catalog_views;
+        if !catalog_views {
+            let mut dependent = std::collections::HashMap::new();
+            for name in &relations.foreign_names {
+                let [ObjectNamePart::Identifier(database), schema, object] = name.0.as_slice()
+                else {
+                    continue;
+                };
+                if !dependent.contains_key(&database.value) {
+                    dependent.insert(
+                        database.value.clone(),
+                        crate::query_catalog::catalog_dependent_views(&self.db, &database.value)?,
+                    );
+                }
+                let key = (
+                    schema.to_string().trim_matches('"').to_lowercase(),
+                    object.to_string().trim_matches('"').to_lowercase(),
+                );
+                if dependent[&database.value].contains(&key) {
+                    catalog_views = true;
+                }
+            }
+        }
         // Access to each database is checked first, as USE checks it (924
         // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
         // object of another database is an invalid object name.
@@ -1067,7 +1092,7 @@ impl Session {
         // and read other databases through their catalogs. Another
         // database's catalog views describe it only from inside it.
         if dml.is_none() {
-            if !relations.catalog_views {
+            if !catalog_views {
                 return Ok(CrossDatabase::Mixed(held));
             }
             if relations.foreign.len() == 1
@@ -1086,7 +1111,7 @@ impl Session {
         // running in that database, which it does when it writes there and
         // reads no third database.
         let refuse_catalog_views = || -> Result<()> {
-            if relations.catalog_views && relations.foreign.len() > 1 {
+            if catalog_views && relations.foreign.len() > 1 {
                 bail!(
                     "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
                 );
@@ -1128,7 +1153,7 @@ impl Session {
             }
             return Ok(CrossDatabase::Home(alias.value.clone(), held));
         }
-        if relations.catalog_views {
+        if catalog_views {
             bail!(
                 "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
             );

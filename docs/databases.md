@@ -189,8 +189,9 @@ separate DuckDB catalog, so the engine places each statement in one of them:
   operand types (LEN, concatenation, comparisons of nvarchar columns) of
   another database's relations come from that database's catalog objects.
 - Another database's catalog views (`b.sys.columns`,
-  `b.INFORMATION_SCHEMA.TABLES`; `sys.databases` excepted) describe it only
-  from inside it, so a query that reads them and nothing else runs in that
+  `b.INFORMATION_SCHEMA.TABLES`; `sys.databases` excepted), and its views
+  whose definitions read them, directly or through other views, describe it
+  only from inside it, so a query that reads them and nothing else runs in that
   database. Combined with other databases' objects or user functions, it
   fails with 40515 `unsupported cross-database statement: it reads catalog
   views of database '...' together with objects or user functions of other

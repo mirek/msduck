@@ -778,6 +778,68 @@ pub(crate) fn foreign_relation(
     Ok(alias.map(|alias| (alias, ObjectName(vec![schema.clone(), object.clone()]))))
 }
 
+/// The views of catalog `alias` that read catalog views (`sys`,
+/// `INFORMATION_SCHEMA`) directly or through other views of it, as
+/// lower-case `(schema, view)`. Those describe DuckDB's default catalog, so
+/// they read correctly only while it is `alias`. The check is textual and
+/// conservative: a view whose definition names such a schema counts.
+pub(crate) fn catalog_dependent_views(
+    db: &Connection,
+    alias: &str,
+) -> duckdb::Result<std::collections::HashSet<(String, String)>> {
+    let mut query = db.prepare(
+        "SELECT lower(schema_name),lower(view_name),lower(sql) FROM duckdb_views() \
+         WHERE database_name=? AND NOT internal \
+         AND lower(schema_name) NOT IN ('sys','information_schema','pg_catalog')",
+    )?;
+    let views = query
+        .query_map([alias], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    let reads = |sql: &str, schema: &str| {
+        sql.match_indices(schema).any(|(at, _)| {
+            let before = sql[..at].chars().next_back();
+            let after = sql[at + schema.len()..]
+                .trim_start_matches('"')
+                .chars()
+                .next();
+            !before.is_some_and(|c| c.is_alphanumeric() || c == '_') && after == Some('.')
+        })
+    };
+    let mut dependent = std::collections::HashSet::new();
+    for (schema, view, sql) in &views {
+        if reads(sql, "sys") || reads(sql, "information_schema") {
+            dependent.insert((schema.clone(), view.clone()));
+        }
+    }
+    // Views over such views, to a fixed point.
+    loop {
+        let before = dependent.len();
+        for (schema, view, sql) in &views {
+            if !dependent.contains(&(schema.clone(), view.clone()))
+                && dependent.iter().any(|(_, name)| {
+                    sql.match_indices(name.as_str()).any(|(at, _)| {
+                        let before = sql[..at].chars().next_back();
+                        let after = sql[at + name.len()..].chars().next();
+                        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    })
+                })
+            {
+                dependent.insert((schema.clone(), view.clone()));
+            }
+        }
+        if dependent.len() == before {
+            return Ok(dependent);
+        }
+    }
+}
+
 /// Run `read` with `alias` as the connection's default catalog, so catalog
 /// views, helper macros and two-part names resolve in that database, then
 /// restore the previous catalog and schema even when `read` fails.
