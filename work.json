@@ -11924,7 +11924,7 @@
     {
       "id": "bulk-character-wire-capacity-bounded-assertions-v1",
       "title": "Bound failure reporting in large wire-capacity capture assertions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing server goal and resource-safe collaboration requirements. First-party post-merge source review of PR951 found tests passing full near48MiB synthetic captures into node:assert.deepEqual; on an unexpected mismatch Node24 can inspect enormous values before reporting failure. Use bounded boolean comparisons while retaining full original assertions and artifacts. The reference/collector evidence remains unchanged; independent runtime952 proceeds separately.",
       "scope": [
         "tests/bulk-character-wire-capacity-capture.test.mjs"
