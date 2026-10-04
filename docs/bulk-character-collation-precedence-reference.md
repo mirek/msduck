@@ -41,8 +41,25 @@ reconstructs SQL declarations, supplied descriptor bytes, ROW/PLP and DONE
 independently. Context SQL and its original packet payload are validated against
 the generated database name and declared profile.
 
-Acquisition and final-source reproduction provenance will be recorded here after
-the independent four-database reproduction completes. The collector pins reviewed
+Acquisition source SHA256 is
+`b3b89ab1edd26fa4c8dd1bc45c49b6072bfb03e0da37cde5051383e63eaf4580`;
+the immutable original artifact is 7,962,502 bytes, SHA256
+`53c33fed21e40b89ed824c1b077ee7acbea5107d91aca34e555675d90f97ef80`.
+The final collector SHA256 is
+`4dd4bf5f17fa3b6fe3be3d0449744d2902d5ed43e1ec4ea2f4f19fb991f8fc97`.
+Its independent four-database reproduction exited zero: 8,403,158 raw bytes,
+SHA256 `54bc855752296818aeb7e9f9a1787a242078d1831b3d5f6895b3078637c38c8a`.
+The complete 13,235-difference sidecar is 8,745,684 bytes, SHA256
+`73c2edaf0dba9f1fcceb18bba541605ab5786a558c3a5c05f57b44e785b57bd5`.
+Private proof `.tmp/collation-precedence-reproduction-proof.json` verifies all
+eight runs, 1,008 observations, exact recursive sidecar and 576 within-run
+valid-wire result comparisons. No identities/counters/errors are normalized
+in either original artifact. All 16 focused tests pass on macOS and Linux,
+with zero failures/cancellations/skips/TODO; final-source reproduction and
+all owned resource cleanup are terminal. The unpinned acquisition intentionally
+failed validation only after retaining its complete original raw observations.
+
+The collector pins reviewed
 helpers and limits each exchange to 2 MiB/1024 packets, the aggregate capture to
 48 MiB, and JSON traversal to 500,000 nodes/depth64. It guards output aliases
 before Docker, retains bounded raw evidence before semantic validation, records
