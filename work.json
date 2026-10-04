@@ -11778,6 +11778,30 @@
       ],
       "issue": 942,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmR3f"
+    },
+    {
+      "id": "ansi-utf8-capacity-expectations-v1",
+      "title": "Update predecessor declaration guards for proven UTF8 capacity",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal. Claimed942 extends the capacity kernel; completed914/921/938 tests and bridge docs currently assert every UTF8 source is unsupported. This disjoint companion removes only superseded UTF8 guards and documents inherited bridge behavior; it does not broaden942 immutable scope or claim runtime integration. Same worker will claim and verify both tasks and close both from one focused exact-head PR after all gates.",
+      "scope": [
+        "crates/msduck-core/tests/ansi_capacity.rs",
+        "crates/msduck-core/tests/ansi_capacity_cp1251.rs",
+        "tests/ansi_capacity_projection.rs",
+        "src/ansi_carrier/projection.rs",
+        "docs/ansi-carrier-projection.md"
+      ],
+      "dependencies": [
+        "ansi-native-capacity-adapter-v1",
+        "ansi-cp1251-capacity-v1"
+      ],
+      "acceptance": [
+        "Update predecessor core/native tests only where they explicitly reject UTF8 declarations contradicted by the942 ground-truth kernel. Preserve all opaque/declaration/resource guards and original single-byte replay expectations. Update bridge documentation/comments truthfully. Do not weaken checks to ignore errors or claim untested runtime integration.",
+        "Check how the native bulk constructor interacts with strict complete-projection validation; keep strict/stored constructors unchanged, and preserve whole-chunk/fallible preflight and native memory safety. Verify explicit UTF8 capacity through actual callbacks against original retained raw success/failure oracles if constructor support changes. UTF8 to single-byte complete projection remains outside the strict API; no accidental declaration acceptance based on NULL/current row.",
+        "Same isolated worker/tree with fresh own receipt; coordinate paired942 source scope without overlaps. One PR may close both only after both acceptance criteria, full exact-head AGENTS verification, independent and Codex review or authorized fallback, required CI, worker merge and Done publication. No engine/Value/catalog/TDS/shared helper/original reference changes."
+      ],
+      "issue": 944,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmSv3"
     }
   ]
 }
