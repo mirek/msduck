@@ -52,6 +52,10 @@ pub(super) struct Catalog {
     names: HashMap<String, String>,
 }
 
+fn scalar_variable(ident: &Ident) -> bool {
+    ident.quote_style.is_none() && ident.value.starts_with('@')
+}
+
 fn lower(ident: &Ident) -> String {
     ident.value.to_lowercase()
 }
@@ -64,6 +68,34 @@ struct Relations {
     backend: HashMap<String, String>,
     qualifiers: HashMap<String, HashSet<String>>,
     defined: HashSet<String>,
+    /// OPENJSON row sources, by a name no relation can have.
+    openjson: HashMap<String, HashMap<String, Column>>,
+}
+
+/// The columns of an OPENJSON row source: the default schema's key
+/// (NVARCHAR(4000)), value (NVARCHAR(MAX)) and type, or the declared WITH
+/// columns, whose NVARCHAR and NCHAR values are carriers.
+fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> {
+    let column = |declared: DataType| {
+        let family = match msduck_sql::sql_type::declaration(&declared) {
+            Ok(msduck_core::types::Type::Character(kind)) => Some(kind.family()),
+            _ => None,
+        };
+        let carrier = matches!(
+            family,
+            Some(msduck_core::character::Family::Nvarchar | msduck_core::character::Family::Nchar)
+        );
+        Column {
+            carrier,
+            text: family.is_some(),
+            declared: carrier.then_some(declared),
+            collation: None,
+        }
+    };
+    msduck_sql::expression_metadata::openjson::columns(columns)
+        .into_iter()
+        .filter_map(|(name, declared)| declared.map(|kind| (name.to_lowercase(), column(kind))))
+        .collect()
 }
 
 impl Relations {
@@ -136,16 +168,31 @@ impl Visitor for Relations {
             for column in &alias.columns {
                 self.defined.insert(lower(&column.name));
             }
-            if !matches!(factor, TableFactor::Table { args: None, .. }) {
+            if !matches!(
+                factor,
+                TableFactor::Table { args: None, .. } | TableFactor::OpenJsonTable { .. }
+            ) {
                 self.qualifiers
                     .entry(lower(&alias.name))
                     .or_default()
                     .insert(DERIVED.into());
             }
         }
-        if let TableFactor::OpenJsonTable { columns, .. } = factor {
-            for column in columns {
-                self.defined.insert(lower(&column.name));
+        if let TableFactor::OpenJsonTable { columns, alias, .. } = factor {
+            // WITH names are source columns, not projection/derived aliases.
+            // A column list in the alias renames the columns: unknown here.
+            let renamed = alias.as_ref().is_some_and(|a| !a.columns.is_empty());
+            let name = format!("\0openjson{}", self.openjson.len());
+            self.qualifiers
+                .entry(alias.as_ref().map_or("openjson".into(), |a| lower(&a.name)))
+                .or_default()
+                .insert(if renamed {
+                    DERIVED.into()
+                } else {
+                    name.clone()
+                });
+            if !renamed {
+                self.openjson.insert(name, openjson_columns(columns));
             }
         }
         if let TableFactor::Table {
@@ -196,7 +243,7 @@ impl Catalog {
         let mut relations = Relations::default();
         let _ = node.visit(&mut relations);
         let mut catalog = Catalog {
-            tables: HashMap::new(),
+            tables: relations.openjson,
             qualifiers: relations.qualifiers,
             defined: relations.defined,
             names: HashMap::new(),
@@ -295,8 +342,11 @@ impl Catalog {
         }
         for (table, columns) in &mut self.tables {
             for (name, column) in columns.iter_mut() {
-                if column.carrier {
-                    column.declared = types.get(&(table.clone(), name.clone())).cloned().flatten();
+                // OPENJSON columns keep their declarations.
+                if column.carrier
+                    && let Some(declared) = types.get(&(table.clone(), name.clone()))
+                {
+                    column.declared = declared.clone();
                 }
             }
         }
@@ -335,7 +385,9 @@ impl Catalog {
     pub fn collation(&self, expr: &Expr) -> Option<&str> {
         let (tables, name): (Vec<&String>, String) = match expr {
             Expr::Nested(inner) => return self.collation(inner),
-            Expr::Identifier(ident) if !self.defined.contains(&lower(ident)) => {
+            Expr::Identifier(ident)
+                if !scalar_variable(ident) && !self.defined.contains(&lower(ident)) =>
+            {
                 (self.tables.keys().collect(), lower(ident))
             }
             Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
@@ -367,7 +419,7 @@ impl Catalog {
         let (tables, name): (Vec<&String>, String) = match expr {
             Expr::Nested(inner) => return self.candidates(inner),
             Expr::Identifier(ident)
-                if !ident.value.starts_with('@') && !self.defined.contains(&lower(ident)) =>
+                if !scalar_variable(ident) && !self.defined.contains(&lower(ident)) =>
             {
                 (self.tables.keys().collect(), lower(ident))
             }
@@ -436,7 +488,9 @@ impl Catalog {
     pub fn resolve(&self, expr: &Expr) -> Resolution<'_> {
         let (tables, name): (Vec<&String>, String) = match expr {
             Expr::Nested(inner) => return self.resolve(inner),
-            Expr::Identifier(ident) if !self.defined.contains(&lower(ident)) => {
+            Expr::Identifier(ident)
+                if !scalar_variable(ident) && !self.defined.contains(&lower(ident)) =>
+            {
                 (self.tables.keys().collect(), lower(ident))
             }
             Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
@@ -476,5 +530,129 @@ impl Catalog {
             (None, true) => Resolution::Plain { text },
             _ => Resolution::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlparser::{dialect::MsSqlDialect, parser::Parser};
+
+    fn catalog(sql: &str) -> Catalog {
+        let statement = Parser::parse_sql(&MsSqlDialect {}, sql).unwrap().remove(0);
+        let mut relations = Relations::default();
+        let _ = statement.visit(&mut relations);
+        Catalog {
+            tables: relations.openjson,
+            qualifiers: relations.qualifiers,
+            defined: relations.defined,
+            names: relations.names,
+        }
+    }
+
+    fn qualified(alias: &str, name: &str) -> Expr {
+        Expr::CompoundIdentifier(vec![Ident::new(alias), Ident::new(name)])
+    }
+
+    #[test]
+    fn openjson_default_declarations_ignore_document_values() {
+        for document in ["NULL", "N'{}'", "@document"] {
+            let catalog = catalog(&format!("SELECT j.[key] FROM OPENJSON({document}) j"));
+            let key = catalog.carrier(&qualified("j", "KEY")).unwrap();
+            assert_eq!(
+                key.declared,
+                Some(DataType::Nvarchar(Some(CharacterLength::IntegerLength {
+                    length: 4000,
+                    unit: None
+                })))
+            );
+            assert_eq!(
+                catalog.carrier(&qualified("j", "value")).unwrap().declared,
+                Some(DataType::Nvarchar(Some(CharacterLength::Max)))
+            );
+            assert!(matches!(
+                catalog.resolve(&qualified("j", "type")),
+                Resolution::Plain { text: false }
+            ));
+            assert!(catalog.carrier(&qualified("j", "missing")).is_none());
+        }
+    }
+
+    #[test]
+    fn openjson_with_columns_retain_character_families_and_widths() {
+        let catalog = catalog(
+            "SELECT * FROM OPENJSON(NULL) WITH (u nvarchar(12), n nchar(3), a varchar(7), c char(4), number int) j",
+        );
+        assert_eq!(
+            catalog.carrier(&qualified("j", "u")).unwrap().declared,
+            Some(DataType::Nvarchar(Some(CharacterLength::IntegerLength {
+                length: 12,
+                unit: None
+            })))
+        );
+        assert!(catalog.carrier(&qualified("j", "n")).is_some());
+        assert!(
+            catalog
+                .carrier(&Expr::Identifier(Ident::new("u")))
+                .is_some()
+        );
+        assert!(catalog.ansi(&qualified("j", "a")));
+        assert!(catalog.ansi(&qualified("j", "c")));
+        assert!(!catalog.textual(&qualified("j", "number")));
+        assert!(catalog.carrier(&qualified("j", "key")).is_none());
+    }
+
+    #[test]
+    fn openjson_default_qualifier_and_ambiguous_aliases_are_conservative() {
+        let source = catalog("SELECT [value] FROM OPENJSON(NULL)");
+        assert!(source.carrier(&qualified("openjson", "value")).is_some());
+        assert!(
+            source
+                .carrier(&Expr::Identifier(Ident::new("value")))
+                .is_some()
+        );
+        let source = catalog(
+            "SELECT j.value FROM OPENJSON(NULL) j CROSS JOIN OPENJSON(NULL) WITH (value varchar(4)) j",
+        );
+        assert!(matches!(
+            source.resolve(&qualified("j", "value")),
+            Resolution::Unknown
+        ));
+        let source =
+            catalog("SELECT j.value FROM OPENJSON(NULL) j CROSS JOIN (SELECT 1 AS value) j");
+        assert!(matches!(
+            source.resolve(&qualified("j", "value")),
+            Resolution::Unknown
+        ));
+    }
+
+    #[test]
+    fn openjson_with_names_do_not_capture_scalar_variables() {
+        let catalog = catalog(
+            "SELECT j.[@p] FROM OPENJSON(NULL) WITH ([@p] nvarchar(12), [@@ROWCOUNT] nvarchar(8)) j",
+        );
+        for name in ["@p", "@@ROWCOUNT"] {
+            assert!(matches!(
+                catalog.resolve(&Expr::Identifier(Ident::new(name))),
+                Resolution::Unknown
+            ));
+            assert!(!catalog.textual(&Expr::Identifier(Ident::new(name))));
+            assert!(
+                catalog
+                    .carrier(&Expr::Identifier(Ident::with_quote('[', name)))
+                    .is_some()
+            );
+            assert!(catalog.carrier(&qualified("j", name)).is_some());
+        }
+    }
+
+    #[test]
+    fn projection_aliases_still_hide_bare_names() {
+        let catalog = catalog("SELECT 1 AS value, j.value FROM OPENJSON(NULL) j");
+        assert!(matches!(
+            catalog.resolve(&Expr::Identifier(Ident::new("value"))),
+            Resolution::Unknown
+        ));
+        assert!(catalog.carrier(&qualified("j", "value")).is_some());
     }
 }
