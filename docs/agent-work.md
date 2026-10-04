@@ -75,21 +75,68 @@ Several local resources are already safe to share:
 
 Shared machine state needs discipline:
 
-- Keep temporary files in the git-ignored `.tmp/` directory at your worktree
-  root: run `mkdir -p .tmp && export TMPDIR=$PWD/.tmp` before building or
-  testing. This covers builds, baseline checkouts, logs and captures; durable
-  evidence still goes in the ignored `artifacts/`.
-  - `/tmp` is often a small per-user tmpfs quota shared by every worker, and
-    filling it breaks all sessions on the host.
-  - `.tmp/` lives under the harness root, so harnesses that confine file
-    access to the working directory accept it without extra permissions.
-  - Never use a shared scratch directory. Delete `.tmp/` contents you no
-    longer need.
+- Keep temporary files in your own directory under `/tmp`, following
+  "Temporary files" below. Durable evidence still goes in the ignored
+  `artifacts/`.
 - Remove only reference containers whose names you recorded, or that carry your
   `msduck.owner` label. Never remove one by guessing from its start time.
 - Never pass whole captures or fixtures to `node:assert`. A failing assertion on
   Node 24 inspects the entire object and has exhausted host memory. Use bounded
   comparisons that report the first differing record.
+
+### Temporary files
+
+`/tmp` is a RAM-backed tmpfs on the shared hosts. It is fast, but it is shared
+by every worker and every agent session on the host, and its space comes out of
+memory. When it fills, every session breaks at once: builds and tests fail, and
+agent harnesses that store their own command output under `/tmp` cannot run any
+shell command. This happened once: thousands of stale `/tmp/msduck-*` test
+database directories, plus two orphaned test servers left running for a day,
+filled it.
+
+- Create one private directory per worker and use it for builds, test
+  databases, baseline checkouts, logs and captures:
+
+  ```sh
+  TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX) && export TMPDIR || exit 1
+  ```
+
+  Do not write `export TMPDIR=$(mktemp ...)`: `export` succeeds even when
+  `mktemp` fails, leaving `TMPDIR` empty so tools fall back to the shared
+  `/tmp`. Shell state does not persist in some harnesses, so record the path
+  and reuse it in every command.
+- In scripts, remove the directory on every exit path, including signals,
+  right after creating it. Some shells (dash) skip `EXIT` traps on a signal,
+  so route signals through `exit`:
+
+  ```sh
+  trap 'rm -rf "$TMPDIR"' EXIT
+  trap 'exit 130' INT TERM HUP
+  ```
+- Delete it when a test run or the task ends, including after failures and
+  interrupted runs. Delete files you no longer need during long tasks too.
+- Before deleting, stop the servers and reference containers you started. A
+  test server keeps its database files open; never leave `msduck --listen`
+  processes running after a suite ends.
+- Check free space with `df -h /tmp` before large runs, and clean up your own
+  files first when it is low.
+- Never delete another worker's files. An idle or paused worker holds no open
+  files but may still reuse its directory, so `lsof` alone does not prove a
+  directory is abandoned. Remove a directory you did not create only when its
+  owner is gone: its task is done or blocked, or its worker is stale under
+  "Standing authorization for stale claims" below, nothing in it changed for
+  several hours, and `lsof +D /tmp/<dir>` shows no holder. Record what you
+  removed in your report.
+- Some tools cannot read `/tmp`. A Snap-packaged `gh`, for example, sees its
+  own private `/tmp`, so write files passed to it (PR bodies, publication
+  change files) under your worktree's ignored `artifacts/` instead.
+- Some older guides and scripts, such as `docs/reference-captures.md` and a
+  few `scripts/capture-*.mjs`, still write to the git-ignored worktree
+  `.tmp/`. That keeps working; clean it up under the same rules, and prefer
+  your `/tmp` directory for new work.
+- Never touch other sessions' harness directories, such as
+  `/tmp/claude-<uid>/`. Deleting a live session's directory breaks every shell
+  command in that session until it is restarted.
 
 Budget memory per worker and leave headroom for the OS. Each compiling worker
 needs several GB, dominated by the bundled DuckDB C++ build. Each SQL Server

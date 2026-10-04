@@ -27,7 +27,7 @@ Build first, then run from an immutable source/executable snapshot:
 
 ```sh
 node scripts/run-client-shards.mjs --suite npm --plan-only --jobs 4
-node scripts/run-client-shards.mjs --suite npm --jobs 4 --output .tmp/client-shards/example
+node scripts/run-client-shards.mjs --suite npm --jobs 4 --output "$TMPDIR/client-shards/example"
 ```
 
 Concurrency defaults to one and is bounded to 1–16 worker processes. Each job
@@ -88,8 +88,10 @@ runners to silently skip files; coverage checking also detects that failure.
 Run the harness regressions with:
 
 ```sh
-mkdir -p .tmp
-TMPDIR="$PWD/.tmp" node --test tests/client-shards.test.mjs tests/client-test-command.test.mjs tests/remote-build.test.mjs
+TMPDIR=$(mktemp -d /tmp/msduck-shards-XXXXXX) && export TMPDIR || exit 1
+trap 'rm -rf "$TMPDIR"' EXIT
+trap 'exit 130' INT TERM HUP
+node --test tests/client-shards.test.mjs tests/client-test-command.test.mjs tests/remote-build.test.mjs
 ```
 
 They cover exhaustive deterministic partitioning, exact name matching, duplicate

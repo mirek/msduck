@@ -46,7 +46,8 @@ An optional `MSDUCK_BUILD_TMPDIR` may select a direct `tmp-NAME` child of the sa
 workspace, with NAME beginning with an ASCII letter or digit and containing only
 letters, digits, underscores or hyphens. Arbitrary absolute paths, nested paths,
 source/cache paths and shell text are rejected before SSH. Local `TMPDIR` is not
-forwarded; local test fixtures still need their own worktree `.tmp` setting.
+forwarded; local test fixtures still need their own private `/tmp` directory
+(see "Temporary files" in [agent-work.md](agent-work.md)).
 
 The existing `runner.lock` covers temporary-directory ownership and all subsequent
 synchronization and execution. Workspace ancestors, temporary directory and
@@ -112,7 +113,8 @@ links for all five excluded root paths, repeated sync/source deletion, stale and
 dangling receiver cache links, ordinary cache preservation, ownership/source-link
 refusals, external destinations and npm stamp invalidation/reinstallation. Tiny
 Cargo fixtures declare their own workspace and are removed after each test.
-Run with `TMPDIR="$PWD/.tmp"` so temporary state stays within your worktree.
+Run with `TMPDIR` set to your own `/tmp` directory and delete it afterwards
+(see "Temporary files" in [agent-work.md](agent-work.md)).
 
 The exclusions recover the owner checkpoint from PR #323 at
 `052a2208faabb2c7e723934e5797e8c0122dd90d`. Its unresolved receiver-link finding is
