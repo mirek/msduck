@@ -984,6 +984,10 @@ impl Session {
             self.current_alias()?,
             &statement.map(alias_targets).unwrap_or_default(),
         );
+        // Modules of other databases are not resolved.
+        if let Some(function) = &relations.foreign_function {
+            bail!("unsupported reference to function {function} in another database");
+        }
         let Some((database, written)) = relations.foreign.first_key_value() else {
             return Ok(CrossDatabase::Local);
         };
@@ -8160,6 +8164,8 @@ struct Relations {
     /// Whether the statement calls schema-qualified (user) functions, which
     /// bind in the session's database.
     routines: bool,
+    /// A three-part function call, which names another database's module.
+    foreign_function: Option<String>,
 }
 impl Relations {
     fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
@@ -8292,12 +8298,20 @@ impl Visitor for Relations {
         {
             self.functions.push(name);
             self.routines |= name.0.len() > 1;
+            if name.0.len() > 2 {
+                self.foreign_function
+                    .get_or_insert_with(|| name.to_string());
+            }
         }
         ControlFlow::Continue(())
     }
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
         if let Expr::Function(function) = expr {
             self.routines |= function.name.0.len() > 1;
+            if function.name.0.len() > 2 {
+                self.foreign_function
+                    .get_or_insert_with(|| function.name.to_string());
+            }
         }
         ControlFlow::Continue(())
     }

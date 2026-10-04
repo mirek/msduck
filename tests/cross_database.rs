@@ -819,3 +819,28 @@ fn dml_writing_another_database_does_not_read_local_views_over_catalog_views() {
     );
     assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 0);
 }
+
+#[test]
+fn modules_of_other_databases_are_refused_and_ctes_are_not_view_dependencies() {
+    let (_server, mut session) = fixture();
+    let (number, _, _, message) = fails(&mut session, "SELECT * FROM foo.dbo.f()");
+    assert_eq!(number, 40515);
+    assert!(
+        message.starts_with("unsupported reference to function"),
+        "{message}"
+    );
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.cols AS SELECT name FROM sys.columns",
+    );
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.innocent AS WITH cols AS (SELECT id FROM dbo.items) SELECT id FROM cols",
+    );
+    ok(&mut session, "USE master");
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.innocent i JOIN dbo.loc l ON l.id = i.id) <> 1 THROW 50001, 'innocent', 1",
+    );
+}

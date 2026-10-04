@@ -808,6 +808,19 @@ pub(crate) fn catalog_dependent_views(
         let statements =
             sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, sql)
                 .ok()?;
+        // One-part names of CTEs anywhere in the definition are not tables.
+        let mut ctes = std::collections::HashSet::new();
+        struct Ctes<'a>(&'a mut std::collections::HashSet<String>);
+        impl Visitor for Ctes<'_> {
+            type Break = ();
+            fn pre_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<()> {
+                for cte in query.with.iter().flat_map(|with| &with.cte_tables) {
+                    self.0.insert(cte.alias.name.value.to_lowercase());
+                }
+                std::ops::ControlFlow::Continue(())
+            }
+        }
+        let _ = statements.visit(&mut Ctes(&mut ctes));
         let mut found = Vec::new();
         let _ = visit_relations(&statements, |name: &ObjectName| {
             let parts = name
@@ -819,6 +832,7 @@ pub(crate) fn catalog_dependent_views(
                 })
                 .collect::<Vec<_>>();
             match parts.as_slice() {
+                [name] if ctes.contains(name) => {}
                 [name] => found.push(("dbo".to_string(), name.clone())),
                 [.., schema, name] => found.push((schema.clone(), name.clone())),
                 [] => {}
