@@ -369,7 +369,7 @@ impl Drop for DatabaseFile {
 #[test]
 fn native_and_projected_bytes_survive_restart_and_arrow_without_text_repair() {
     let file = DatabaseFile::new();
-    let cells = vec![
+    let cells = [
         (None, None),
         (Some(vec![]), Some(vec![])),
         (Some(hex("eda080")), Some(hex("fdfffdff"))),
