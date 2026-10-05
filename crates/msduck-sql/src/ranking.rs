@@ -13,11 +13,22 @@ pub fn validate(function: &Function) -> Result<(), String> {
     if !returns_bigint(function) && !matches!(name.as_str(), "percent_rank" | "cume_dist") {
         return Ok(());
     }
+    let distribution = matches!(name.as_str(), "percent_rank" | "cume_dist");
+    let display_name = if distribution {
+        name.to_ascii_uppercase()
+    } else {
+        name.clone()
+    };
     let count = if name == "ntile" { 1 } else { 0 };
     let FunctionArguments::List(args) = &function.args else {
         return Err(format!("The {name} function requires {count} argument(s)."));
     };
     if args.args.len() != count {
+        if distribution {
+            return Err(format!(
+                "The function '{display_name}' takes exactly 0 argument(s)."
+            ));
+        }
         return Err(format!("The {name} function requires {count} argument(s)."));
     }
     if name == "ntile"
@@ -38,18 +49,20 @@ pub fn validate(function: &Function) -> Result<(), String> {
         return Err("unsupported ranking function modifiers".into());
     }
     let Some(over) = &function.over else {
-        return Err(format!("The function '{name}' must have an OVER clause."));
+        return Err(format!(
+            "The function '{display_name}' must have an OVER clause."
+        ));
     };
     if let WindowType::WindowSpec(spec) = over {
         if spec.window_frame.is_some() {
             return Err(format!(
-                "The function '{name}' may not have a window frame."
+                "The function '{display_name}' may not have a window frame."
             ));
         }
         // Query translation expands named window inheritance before validation.
         if spec.order_by.is_empty() && spec.window_name.is_none() {
             return Err(format!(
-                "The function '{name}' must have an OVER clause with ORDER BY."
+                "The function '{display_name}' must have an OVER clause with ORDER BY."
             ));
         }
     }
@@ -59,6 +72,20 @@ pub fn validate(function: &Function) -> Result<(), String> {
 pub fn error_number(message: &str) -> Option<i32> {
     if message == crate::percentile::RANGE {
         return Some(8727);
+    }
+    for name in ["PERCENT_RANK", "CUME_DIST"] {
+        if message == format!("The function '{name}' takes exactly 0 argument(s).") {
+            return Some(4114);
+        }
+        if message == format!("The function '{name}' may not have a window frame.") {
+            return Some(10752);
+        }
+        if message == format!("The function '{name}' must have an OVER clause.") {
+            return Some(10753);
+        }
+        if message == format!("The function '{name}' must have an OVER clause with ORDER BY.") {
+            return Some(4112);
+        }
     }
     for name in [
         "row_number",
