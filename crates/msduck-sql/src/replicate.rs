@@ -113,6 +113,41 @@ fn cast(expr: Expr, data_type: DataType) -> Expr {
         format: None,
     }
 }
+// DuckDB first converts an unquoted decimal literal through its own numeric
+// literal type before REAL, which double-rounds some SQL Server boundaries.
+// Its string-to-REAL conversion reads the exact source decimal. Apply that
+// only to a directly cast plain decimal literal; expressions and floating
+// exponent literals retain their normal execution path.
+fn exact_real_literal(source: &Expr) -> Expr {
+    let mut source = source.clone();
+    if let Expr::Cast { expr, .. } = &mut source {
+        let decimal = match expr.as_ref() {
+            Expr::Value(v) => match &v.value {
+                Value::Number(text, _) => Some(text.clone()),
+                _ => None,
+            },
+            Expr::UnaryOp {
+                op: UnaryOperator::Minus,
+                expr,
+            } => match expr.as_ref() {
+                Expr::Value(v) => match &v.value {
+                    Value::Number(text, _) => Some(format!("-{text}")),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(decimal) = decimal
+            && decimal
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b'.' || byte == b'-')
+        {
+            **expr = Expr::Value(Value::SingleQuotedString(decimal).into());
+        }
+    }
+    source
+}
 pub fn lower(
     expr: &mut Expr,
     parameters: &HashMap<String, Parameter>,
@@ -127,9 +162,16 @@ pub fn lower(
     let Some((input, binary, bit)) = source_type(source, parameters, column) else {
         return Ok(());
     };
+    let floating = storage::kind(source, parameters, column)
+        .and_then(|kind| crate::sql_type::declaration(&kind).ok())
+        .filter(|kind| matches!(kind, Type::Real | Type::Float));
     let result = msduck_core::replicate::result_type(input, constant_count(count));
     let unicode = matches!(input.family(), Family::Nchar | Family::Nvarchar);
-    let family = if binary {
+    let family = if matches!(floating, Some(Type::Real)) {
+        "real"
+    } else if matches!(floating, Some(Type::Float)) {
+        "float"
+    } else if binary {
         "binary"
     } else if unicode {
         "nvarchar"
@@ -144,7 +186,14 @@ pub fn lower(
             ""
         }
     );
-    let source = if binary {
+    let source = if let Some(kind) = floating {
+        let source = if kind == Type::Real {
+            exact_real_literal(source)
+        } else {
+            source.clone()
+        };
+        cast(source, crate::sql_type::ast(kind))
+    } else if binary {
         source.clone()
     } else {
         let source = if bit {
@@ -191,6 +240,9 @@ mod tests {
             ("REPLICATE('x',0)", "VARCHAR(2)"),
             ("REPLICATE(N'x',-1)", "NVARCHAR(1)"),
             ("REPLICATE(12,3)", "VARCHAR(36)"),
+            ("REPLICATE(CAST(1 AS REAL),2)", "VARCHAR(46)"),
+            ("REPLICATE(CAST(1 AS FLOAT),2)", "VARCHAR(46)"),
+            ("REPLICATE(CAST(0.00009999995 AS REAL),2)", "VARCHAR(46)"),
             ("REPLICATE('x',2.9)", "VARCHAR(8000)"),
             ("REPLICATE(CAST('x' AS VARCHAR(MAX)),3)", "VARCHAR(MAX)"),
         ] {
@@ -213,10 +265,33 @@ mod tests {
                 "{sql}"
             );
             lower(expr, &HashMap::new(), &|_| None).unwrap();
+            if sql.contains(" AS REAL)") {
+                assert!(expr.to_string().contains("__msduck_replicate_real"));
+            }
+            if sql.contains("0.00009999995") {
+                assert!(expr.to_string().contains("'0.00009999995'"));
+            }
+            if sql.contains(" AS FLOAT)") {
+                assert!(expr.to_string().contains("__msduck_replicate_float"));
+            }
             let once = expr.clone();
             lower(expr, &HashMap::new(), &|_| None).unwrap();
             assert_eq!(*expr, once);
         }
+        let mut statements =
+            crate::batch::parse("SELECT REPLICATE(CAST(RANDOM() AS REAL),CAST(RANDOM()*2 AS INT))")
+                .unwrap();
+        let Statement::Query(query) = &mut statements[0] else {
+            unreachable!()
+        };
+        let SetExpr::Select(select) = query.body.as_mut() else {
+            unreachable!()
+        };
+        let SelectItem::UnnamedExpr(expr) = &mut select.projection[0] else {
+            unreachable!()
+        };
+        lower(expr, &HashMap::new(), &|_| None).unwrap();
+        assert_eq!(expr.to_string().matches("RANDOM()").count(), 2);
         let statements =
             crate::batch::parse("INSERT INTO t VALUES(1); IF 1=0 SELECT REPLICATE('x',1,2)")
                 .unwrap();

@@ -140,6 +140,39 @@ complete REPLICATE-related captures: 13/14 original probes, 4/5 metadata probes,
 - REAL/FLOAT source value 1 is formatted as `1.0` rather than `1` by the existing
   cast path; all ten numeric source capacities and the other eight values match.
 
+## REAL/FLOAT implicit source formatting
+
+`scripts/capture-replicate-float.mjs --write-fixture` captured 56 REAL/FLOAT
+literal, table-column and typed RPC cases twice in fresh databases on the pinned
+SQL Server 2025 image. The complete rows, descriptors, errors and completion
+tokens are retained without normalization in `reference/replicate-float.json`.
+The implicit conversion used by REPLICATE yields six significant decimal digits.
+It chooses fixed notation when the *rounded* decimal exponent is -4 through 5,
+otherwise scientific notation with a lowercase `e`, explicit sign and three
+exponent digits. For example, 1 becomes `1`, 1.23456789 becomes `1.23457`,
+1,000,000 becomes `1e+006` and 0.00001 becomes `1e-005`. The source's physical
+precision matters: REAL 0.00009999995 yields `9.99999e-005`, while FLOAT yields
+`0.0001`; REAL 1.234565 yields `1.23457` while FLOAT yields `1.23456`. Both
+types turn negative zero into `0`; NULL remains NULL. The captured REPLICATE
+result descriptor for a constant count of two is VARCHAR(46), independent of
+the runtime formatted value.
+
+SQL lowering now passes a typed REAL or FLOAT source directly to a native
+adapter instead of first using DuckDB's VARCHAR cast. The adapter converts once
+before the existing bounded repetition plan. It retains the same per-cell and
+per-chunk allocation limits and rejects non-finite DuckDB values explicitly;
+SQL Server has no NaN/Infinity source literals in the retained evidence. This
+path also converts a directly cast plain decimal REAL literal from its exact
+decimal spelling. DuckDB otherwise double-rounds `CAST(0.00009999995 AS REAL)`
+to a different f32 value before formatting; its string-to-REAL cast agrees with
+the retained SQL Server result. General REAL arithmetic and non-REPLICATE casts
+remain outside this task's scope and may still show source conversion differences.
+The change does not alter general CAST/CONVERT float formatting, other source
+families, count-conversion diagnostics, RIGHT metadata or SQL MAX size limits.
+The earlier 20/23 comparison above describes the pre-change snapshot and is
+preserved as historical evidence; fresh reference replay is required to assess
+this change's exact public result coverage.
+
 All 82 earlier RAISERROR probes were rerun: 77 now match exactly (up from 69).
 The remaining five differ in TRY/CATCH completions, WITH LOG and top-level RETURN
 semantics. The ERROR_* metadata matrix still matches 6/7 complete captures.
