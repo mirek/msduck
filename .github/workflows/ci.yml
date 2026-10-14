@@ -46,7 +46,7 @@ jobs:
             target
           key: ${{ runner.os }}-rust-1.95.0-fast-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
           restore-keys: ${{ runner.os }}-rust-1.95.0-fast-${{ hashFiles('Cargo.lock') }}-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - run: node --test tests/agent-work.test.mjs tests/client-shards.test.mjs tests/client-test-command.test.mjs
@@ -68,7 +68,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
